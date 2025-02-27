@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
@@ -27,6 +28,19 @@
 #define BUF_SIZE 5
 
 volatile int STOP = FALSE;
+
+
+int alarmEnabled = FALSE;
+int alarmCount = 0;
+
+// Alarm function handler
+void alarmHandler(int signal)
+{
+    alarmEnabled = FALSE;
+    alarmCount++;
+
+    printf("Alarm #%d\n", alarmCount);
+}
 
 int main(int argc, char *argv[])
 {
@@ -171,6 +185,18 @@ int main(int argc, char *argv[])
 
     int bytes_w = write(fd, buf_w, BUF_SIZE);
     printf("%d bytes written\n", bytes_w); */
+
+    (void)signal(SIGALRM, alarmHandler);
+
+    while (alarmCount < 4)
+    {
+        if (alarmEnabled == FALSE)
+        {
+            write(fd, buf_w, BUF_SIZE);
+            alarm(3); // Set alarm to be triggered in 3s
+            alarmEnabled = TRUE;
+        }
+    }
     
 
     // The while() cycle should be changed in order to respect the specifications
