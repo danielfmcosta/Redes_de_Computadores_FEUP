@@ -36,7 +36,9 @@
 #define BUF_SIZE_DISC 5
 #define A_DISC 0x03
 #define C_DISC 0x0B
-#define BCC1_DISC A_DISC^C_DISC  
+#define BCC1_DISC A_DISC^C_DISC 
+
+#define sleep_time 1
 
 volatile int ESTABLISHMENT = FALSE;
 volatile int STOP = FALSE;
@@ -62,6 +64,33 @@ void alarmHandler(int signal)
     }
     return BCC2;
 }*/
+
+void send_DISC(int fd){
+    // Send DISC
+    unsigned char buf_DISC_Write[BUF_SIZE_DISC] = {0};
+    buf_DISC_Write[0] = FLAG;
+    buf_DISC_Write[1] = A_DISC;
+    buf_DISC_Write[2] = C_DISC;
+    buf_DISC_Write[3] = BCC1_DISC;
+    buf_DISC_Write[4] = FLAG;
+        
+    write(fd, buf_DISC_Write, BUF_SIZE_DISC);
+    printf("DISC send\n");
+    sleep(sleep_time);
+}
+
+void send_UA(int fd){
+    unsigned char buf_UA[BUF_SIZE_UA] = {0};
+    buf_UA[0] = FLAG;
+    buf_UA[1] = A_UA;
+    buf_UA[2] = C_UA;
+    buf_UA[3] = BCC1_UA;
+    buf_UA[4] = FLAG;
+        
+    write(fd, buf_UA, BUF_SIZE_UA);
+    printf("UA send\n\n");
+    sleep(sleep_time);
+}
 
 int read_UA(int fd){
     // Read UA
@@ -120,61 +149,11 @@ int read_UA(int fd){
     return 1;
 }
 
-int llopen(int fd){
-    //Send SET
-    unsigned char buf_SET[BUF_SIZE_SET] = {0};
-    buf_SET[0] = FLAG;
-    buf_SET[1] = A_SET;
-    buf_SET[2] = C_SET;
-    buf_SET[3] = BCC1_SET;
-    buf_SET[4] = FLAG;
-
-    write(fd, buf_SET, BUF_SIZE_SET);
-    printf("SET send\n");
-    sleep(1);
-
-    int check = read_UA(fd);
-    if (check == 1) {
-        ESTABLISHMENT = TRUE;
-        return 1;
-    }
-
-    (void)signal(SIGALRM, alarmHandler);
-
-    while (alarmCount < 4 && ESTABLISHMENT == FALSE) {
-        if (alarmEnabled == FALSE) {       
-            write(fd, buf_SET, BUF_SIZE_SET);
-            alarm(3);
-            alarmEnabled = TRUE;
-            sleep(1);
-
-            if (read_UA(fd) == 1) {
-                ESTABLISHMENT = TRUE;
-                alarm(0);
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-int llclose(int fd){
-    // Write DISC
-    unsigned char buf_DISC_Write[BUF_SIZE_DISC] = {0};
-    buf_DISC_Write[0] = FLAG;
-    buf_DISC_Write[1] = A_DISC;
-    buf_DISC_Write[2] = C_DISC;
-    buf_DISC_Write[3] = BCC1_DISC;
-    buf_DISC_Write[4] = FLAG;
-        
-    write(fd, buf_DISC_Write, BUF_SIZE_DISC);
-    printf("DISC send\n");
-
+int read_DISC(int fd){
     // Read DISC
     unsigned char buf_DISC_Read[1] = {0};
     int k_DISC = 0;
     volatile int STOP_DISC = FALSE;
-    sleep(1);
     
     while (STOP_DISC == FALSE) {
         read(fd,buf_DISC_Read,1);
@@ -219,17 +198,60 @@ int llclose(int fd){
             }  
     }   
     printf("DISC received\n");
+    return 1;
+}
+
+int llopen(int fd){
+    // Send SET
+    unsigned char buf_SET[BUF_SIZE_SET] = {0};
+    buf_SET[0] = FLAG;
+    buf_SET[1] = A_SET;
+    buf_SET[2] = C_SET;
+    buf_SET[3] = BCC1_SET;
+    buf_SET[4] = FLAG;
+
+    write(fd, buf_SET, BUF_SIZE_SET);
+    printf("SET send\n");
+    sleep(sleep_time);
+
+    // Read UA
+    int check = read_UA(fd);
+    if (check == 1) {
+        ESTABLISHMENT = TRUE;
+        return 1;
+    }
+
+    (void)signal(SIGALRM, alarmHandler);
+
+    while (alarmCount < 4 && ESTABLISHMENT == FALSE) {
+        if (alarmEnabled == FALSE) {       
+            write(fd, buf_SET, BUF_SIZE_SET);
+            alarm(3);
+            alarmEnabled = TRUE;
+            sleep(1);
+
+            if (read_UA(fd) == 1) {
+                ESTABLISHMENT = TRUE;
+                alarm(0);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int llclose(int fd){
+    // Send DISC
+    send_DISC(fd);
+
+    // Read DISC
+    if(read_DISC(fd)==0){
+        printf("Error DISC\n");
+        return 0;
+    }
     
-    // Write UA
-    unsigned char buf_UA[BUF_SIZE_UA] = {0};
-    buf_UA[0] = FLAG;
-    buf_UA[1] = A_UA;
-    buf_UA[2] = C_UA;
-    buf_UA[3] = BCC1_UA;
-    buf_UA[4] = FLAG;
-        
-    write(fd, buf_UA, BUF_SIZE_UA);
-    printf("UA send\n\n");
+    // Send UA
+    send_UA(fd);
 
     Termination = TRUE;    
     return 1;            
@@ -302,10 +324,17 @@ int main(int argc, char *argv[])
 
     printf("\nNew termios structure set\n\n");
 
-    if(llopen(fd) == 1)
+    if(llopen(fd) == 1){
         printf("Establishment Ok!\n\n");
-    if(llclose(fd) == 1)
+    } else {
+        printf("Establishment Not Ok!\n\n");
+    }
+
+    if(llclose(fd) == 1){
         printf("Termination Ok!\n\n");
+    } else {
+        printf("Termination Not Ok!\n\n");
+    }
 
     //Write
     /*unsigned char buf[BUF_SIZE] = {0};
@@ -415,4 +444,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-
