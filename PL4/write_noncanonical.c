@@ -43,12 +43,12 @@ int alarmCount = 0;
 
 void alarmHandler(int signal)
 {
-    if (ESTABLISHMENT == FALSE){
-        alarmEnabled = FALSE;
-        alarmCount++;
-        
-        printf("Alarm #%d\n", alarmCount);
-    }
+
+    alarmEnabled = FALSE;
+    alarmCount++;
+    
+    printf("Alarm #%d\n", alarmCount);
+
 }
 
 int get_BCC2(unsigned char *argv){
@@ -208,11 +208,12 @@ int main(int argc, char *argv[])
             write(fd, SET, SET_UA_SIZE);
             if (read_UA(fd) == 1) {
                 ESTABLISHMENT = TRUE;
+                alarm(0);
                 printf("Ligação estabelecida\n");
                 break;
+            }else {
+                alarm(3); // Set alarm to be triggered in 3s
             }
-
-            alarm(3); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
 
 
@@ -220,7 +221,7 @@ int main(int argc, char *argv[])
     }   
 
     //Write
-    unsigned char buf[BUF_SIZE] = {0};
+    /*unsigned char buf[BUF_SIZE] = {0};
 
     buf[0] = FLAG;
     buf[1] = A;
