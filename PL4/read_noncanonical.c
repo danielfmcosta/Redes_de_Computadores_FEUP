@@ -33,8 +33,14 @@
 #define C_UA 0x07
 #define BCC1_UA A_UA^C_UA
 
+#define BUF_SIZE_DISC 5
+#define A_DISC 0x03
+#define C_DISC 0x0B
+#define BCC1_DISC A_DISC^C_DISC  
+
 volatile int STOP = FALSE;
 volatile int Establishment = FALSE;
+volatile int Termination = FALSE;
 
 /*int get_BCC2(unsigned char *argv){
     int BCC2 = argv[4];
@@ -98,6 +104,120 @@ int llopen(int fd){
     printf("UA send\n\n");
 
     Establishment = TRUE;    
+    return 1;            
+}
+
+int llclose(int fd){
+    // Read DISC
+    unsigned char buf_DISC_Read[1] = {0};
+    int k_DISC = 0;
+    volatile int STOP_DISC = FALSE;
+    
+    while (STOP_DISC == FALSE) {
+        read(fd,buf_DISC_Read,1);
+        switch(buf_DISC_Read[0]) {
+            case FLAG:
+                if(k_DISC==0){
+                    k_DISC++;
+                } else if(k_DISC==4){
+                    STOP_DISC = TRUE;
+                } else {
+                    k_DISC=0;
+                    return 0;
+                }          
+                break;
+            case A_DISC:
+                if(k_DISC==1){
+                    k_DISC++;
+                } else {                    
+                    k_DISC=0;
+                    return 0;
+                }
+                break;
+            case C_DISC:
+                if(k_DISC==2){
+                    k_DISC++;
+                } else {                    
+                    k_DISC=0;
+                    return 0;
+                }
+                break;   
+            case BCC1_DISC:
+                if(k_DISC==3){
+                    k_DISC++;
+                } else {                    
+                    k_DISC=0;
+                    return 0;
+                }
+                break; 
+            default:
+                    return 0;
+                break;
+            }  
+    }   
+    printf("DISC received\n");
+
+    // Write DISC
+    unsigned char buf_DISC_Write[BUF_SIZE_DISC] = {0};
+    buf_DISC_Write[0] = FLAG;
+    buf_DISC_Write[1] = A_DISC;
+    buf_DISC_Write[2] = C_DISC;
+    buf_DISC_Write[3] = BCC1_DISC;
+    buf_DISC_Write[4] = FLAG;
+        
+    write(fd, buf_DISC_Write, BUF_SIZE_DISC);
+    printf("DISC send\n");
+    
+    // Read UA
+    unsigned char buf_UA[1] = {0};
+    int k_UA = 0;
+    volatile int STOP_UA = FALSE;
+    
+    while (STOP_UA == FALSE) {
+        read(fd,buf_UA,1);
+        switch(buf_UA[0]) {
+            case FLAG:
+                if(k_UA==0){
+                    k_UA++;
+                } else if(k_UA==4){
+                    STOP_UA = TRUE;
+                } else {
+                    k_UA=0;
+                    return 0;
+                }          
+                break;
+            case A_UA:
+                if(k_UA==1){
+                    k_UA++;
+                } else {                    
+                    k_UA=0;
+                    return 0;
+                }
+                break;
+            case C_UA:
+                if(k_UA==2){
+                    k_UA++;
+                } else {                    
+                    k_UA=0;
+                    return 0;
+                }
+                break;   
+            case BCC1_UA:
+                if(k_UA==3){
+                    k_UA++;
+                } else {                    
+                    k_UA=0;
+                    return 0;
+                }
+                break; 
+            default:
+                    return 0;
+                break;
+            }  
+    }
+    printf("UA read\n\n");
+
+    Termination = TRUE;
     return 1;            
 }
 
@@ -168,8 +288,9 @@ int main(int argc, char *argv[])
     printf("\nNew termios structure set\n\n");
 
     if(llopen(fd) == 1)
-        printf("Establisghment Ok!\n");
-
+        printf("Establishment Ok!\n\n");
+    if(llclose(fd) == 1)
+        printf("Termination Ok!\n\n");
 
     // Read - State Machine
     
