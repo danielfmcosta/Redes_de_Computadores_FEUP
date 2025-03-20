@@ -27,9 +27,27 @@
 #define ESCAPE 0x7D
 
 #define A 0x03
-#define C 0x40
-#define D 0x01
-#define BCC1 A^C
+
+#define C_0 0x00
+#define C_1 0x40
+#define BCC1_0 A^C_0
+#define BCC1_1 A^C_1
+
+#define A_RR_0 0x03
+#define C_RR_0 0x05
+#define BCC1_RR_0 A_RR_0^C_RR_0
+
+#define A_RR_1 0x03
+#define C_RR_1 0x85
+#define BCC1_RR_1 A_RR_1^C_RR_1
+
+#define A_REJ_0 0x03
+#define C_REJ_0 0x01
+#define BCC1_REJ_0 A_REJ_0^C_REJ_0
+
+#define A_REJ_1 0x03
+#define C_REJ_1 0x81
+#define BCC1_REJ_1 A_REJ_1^C_REJ_1
 
 #define BUF_SIZE_SET_UA_RR_DISC 5
 #define A_SET 0x03
@@ -51,7 +69,7 @@ volatile int ESTABLISHMENT = FALSE;
 volatile int READ = FALSE;
 volatile int TERMINATION = FALSE;
 
-int c_RR = 0x85; // porque apos a primeira mensagem ele esperar receber um com o Ns=1, caso espere receber o Ns=0, o C_RR = 0x05
+int C_RR = 0x85;
 
 void print_array(unsigned char *argv) 
 {   
@@ -98,23 +116,60 @@ void send_DISC(int fd){
     sleep(sleep_time);
 }
 
-void send_RR(int fd) {
-    int BCC1_RR = A^c_RR;
-    // Write RR
-    unsigned char buf_RR_Write[BUF_SIZE_SET_UA_RR_DISC] = {0};
-    buf_RR_Write[0] = FLAG;
-    buf_RR_Write[1] = A_DISC;
-    buf_RR_Write[2] = c_RR;
-    buf_RR_Write[3] = BCC1_RR;
-    buf_RR_Write[4] = FLAG;
+void send_RR_1(int fd) {
+    // Write RR1
+    unsigned char buf_RR_1_Write[BUF_SIZE_SET_UA_RR_DISC] = {0};
+    buf_RR_1_Write[0] = FLAG;
+    buf_RR_1_Write[1] = A_RR_1;
+    buf_RR_1_Write[2] = C_RR_1;
+    buf_RR_1_Write[3] = BCC1_RR_1;
+    buf_RR_1_Write[4] = FLAG;
         
-    write(fd, buf_RR_Write, BUF_SIZE_SET_UA_RR_DISC);
-
-    c_RR = c_RR ^ 0x80; // altera o c_RR entre 0x05 e 0x85
-
-    printf("RR send\n");
+    write(fd, buf_RR_1_Write, BUF_SIZE_SET_UA_RR_DISC);
+    printf("RR1 send!\n");
     sleep(sleep_time);
+}
 
+void send_RR_0(int fd) {
+    // Write RR0
+    unsigned char buf_RR_0_Write[BUF_SIZE_SET_UA_RR_DISC] = {0};
+    buf_RR_0_Write[0] = FLAG;
+    buf_RR_0_Write[1] = A_RR_0;
+    buf_RR_0_Write[2] = C_RR_0;
+    buf_RR_0_Write[3] = BCC1_RR_0;
+    buf_RR_0_Write[4] = FLAG;
+        
+    write(fd, buf_RR_0_Write, BUF_SIZE_SET_UA_RR_DISC);
+    printf("RR0 send!\n");
+    sleep(sleep_time);
+}
+
+void send_REJ_0(int fd) {
+    // Write REJ0
+    unsigned char buf_REJ_0_Write[BUF_SIZE_SET_UA_RR_DISC] = {0};
+    buf_REJ_0_Write[0] = FLAG;
+    buf_REJ_0_Write[1] = A_REJ_0;
+    buf_REJ_0_Write[2] = C_REJ_0;
+    buf_REJ_0_Write[3] = BCC1_REJ_0;
+    buf_REJ_0_Write[4] = FLAG;
+        
+    write(fd, buf_REJ_0_Write, BUF_SIZE_SET_UA_RR_DISC);
+    printf("REJ0 send!\n");
+    sleep(sleep_time);
+}
+
+void send_REJ_1(int fd) {
+    // Write REJ1
+    unsigned char buf_REJ_1_Write[BUF_SIZE_SET_UA_RR_DISC] = {0};
+    buf_REJ_1_Write[0] = FLAG;
+    buf_REJ_1_Write[1] = A_REJ_1;
+    buf_REJ_1_Write[2] = C_REJ_1;
+    buf_REJ_1_Write[3] = BCC1_REJ_1;
+    buf_REJ_1_Write[4] = FLAG;
+        
+    write(fd, buf_REJ_1_Write, BUF_SIZE_SET_UA_RR_DISC);
+    printf("REJ1 send!\n");
+    sleep(sleep_time);
 }
 
 int read_SET(int fd){
@@ -267,13 +322,11 @@ int read_UA(int fd){
 
 unsigned char* byte_destuffing(unsigned char *argv, int stuffed_length)
 {
-    static unsigned char destuffed[MAX_BUF_SIZE];
+    static unsigned char destuffed[BUF_SIZE];
     int i, j = 0;
 
-    // 1) Copy the first FLAG (0x7E)
-    destuffed[j++] = argv[0];  // 0x7E
+    destuffed[j++] = argv[0];
 
-    // 2) Destuff everything between the first and last FLAG
     for (i = 1; i < stuffed_length - 1; i++) {
         if (argv[i] == ESCAPE) {
             destuffed[j++] = argv[++i] ^ 0x20;
@@ -282,7 +335,6 @@ unsigned char* byte_destuffing(unsigned char *argv, int stuffed_length)
         }
     }
 
-    // 3) Copy the last FLAG (0x7E)
     destuffed[j++] = argv[stuffed_length - 1];
 
     return destuffed;
@@ -316,6 +368,7 @@ int llread(int fd){
                 case FLAG:
                     if(k==0){
                         res[k]=buf[0];
+                        k++;
                     } else {    
                         return 0;
                     }
@@ -323,20 +376,44 @@ int llread(int fd){
                 case A:
                     if(k==1){
                         res[k]=buf[0];
+                        k++;
+                    } else if(k==3){
+                        res[k]=buf[0];
+                        k++;
+                        FlagBCC2 = 1;
                     } else {                    
                         return 0;
                     }
                     break;
-                case C:
+                case C_0:
                     if(k==2){
                         res[k]=buf[0];
+                        k++;
                     } else {                    
                         return 0;
                     }
                     break;
-                case BCC1:
+                case C_1:
+                    if(k==2){
+                        res[k]=buf[0];
+                        k++;
+                    } else {                    
+                        return 0;
+                    }
+                    break;
+                /*case BCC1_0:
                     if(k==3){
                         res[k]=buf[0];
+                        k++;
+                        FlagBCC2 = 1;
+                    } else {
+                        return 0;
+                    }
+                    break;*/
+                case BCC1_1:
+                    if(k==3){
+                        res[k]=buf[0];
+                        k++;
                         FlagBCC2 = 1;
                     } else {
                         return 0;
@@ -348,26 +425,39 @@ int llread(int fd){
         } else {
             if(buf[0]==FLAG){
                 res[k]=buf[0];
+                k++;
                 STOP = TRUE;
             } else {
                 res[k]=buf[0];
+                k++;
             }
         }   
-        k++;
     } 
 
-    print_array(res);
-    int length = sizeof(res) +1;
-    unsigned char* original_buf = byte_destuffing(res, length);
-    print_array(original_buf);
-    length = sizeof(original_buf) +1;
-    int BCC2 = get_BCC2(original_buf);
-    if(res[length-2]!=BCC2){ 
-        printf("Deu barracu\n");
+    unsigned char* original_buf = byte_destuffing(res, sizeof(res));
+    
+
+    if(original_buf[2] == C_0) {
+        if(original_buf[sizeof(original_buf)-2]!=get_BCC2(original_buf)){ 
+            printf("Error BCC2!\n");
+            send_REJ_0(fd);
+            return 0;
+        } else {
+            send_RR_1(fd);
+        }
+    } else if(original_buf[2] == C_1){
+        if(original_buf[sizeof(original_buf)-2]!=get_BCC2(original_buf)){ 
+            printf("Error BCC2!\n");
+            send_REJ_1(fd);
+            return 0;
+        } else {
+             send_RR_0(fd);
+        }
+    } else {
+        printf("Error send RR!\n");
         return 0;
     }
 
-    send_RR(fd);
     READ = TRUE;
     return 1;
 }
