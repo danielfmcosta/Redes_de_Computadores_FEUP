@@ -33,31 +33,39 @@
 #define BCC1_0 A^C_0
 #define BCC1_1 A^C_1
 
+//RR0 constants
 #define A_RR_0 0x03
 #define C_RR_0 0x05
 #define BCC1_RR_0 A_RR_0^C_RR_0
 
+//RR1 constants
 #define A_RR_1 0x03
 #define C_RR_1 0x85
 #define BCC1_RR_1 A_RR_1^C_RR_1
 
+//REj0 constants
 #define A_REJ_0 0x03
 #define C_REJ_0 0x01
 #define BCC1_REJ_0 A_REJ_0^C_REJ_0
 
+//REJ1 constants
 #define A_REJ_1 0x03
 #define C_REJ_1 0x81
 #define BCC1_REJ_1 A_REJ_1^C_REJ_1
 
 #define BUF_SIZE_SET_UA_RR_DISC 5
+
+//SET constants
 #define A_SET 0x03
 #define C_SET 0x03
 #define BCC1_SET A_SET^C_SET
 
+//UA constants
 #define A_UA 0x03
 #define C_UA 0x07
 #define BCC1_UA A_UA^C_UA
 
+//DISC constants
 #define A_DISC 0x03
 #define C_DISC 0x0B
 #define BCC1_DISC A_DISC^C_DISC 
@@ -98,7 +106,7 @@ void send_UA(int fd){
     buf_UA[4] = FLAG;
         
     write(fd, buf_UA, BUF_SIZE_SET_UA_RR_DISC);
-    printf("UA send\n\n");
+    printf("UA send!\n\n");
     sleep(sleep_time);
 }
 
@@ -112,7 +120,7 @@ void send_DISC(int fd){
     buf_DISC_Write[4] = FLAG;
         
     write(fd, buf_DISC_Write, BUF_SIZE_SET_UA_RR_DISC);
-    printf("DISC send\n");
+    printf("DISC send!\n");
     sleep(sleep_time);
 }
 
@@ -212,7 +220,7 @@ int read_SET(int fd){
                 break;
             }  
     }   
-    printf("SET received\n");
+    printf("SET received!\n");
     return 1;
 }
 
@@ -264,7 +272,7 @@ int read_DISC(int fd){
                 break;
             }  
     }   
-    printf("DISC received\n");
+    printf("DISC received!\n");
     return 1;
 }
 
@@ -316,7 +324,7 @@ int read_UA(int fd){
                 break;
             }  
     }
-    printf("UA read\n\n");
+    printf("UA read!\n\n");
     return 1;
 }
 
@@ -435,7 +443,8 @@ int llread(int fd){
     } 
 
     unsigned char* original_buf = byte_destuffing(res, sizeof(res));
-    
+
+    //print_array(original_buf);
 
     if(original_buf[2] == C_0) {
         if(original_buf[sizeof(original_buf)-2]!=get_BCC2(original_buf)){ 
@@ -555,16 +564,20 @@ int main(int argc, char *argv[])
         printf("Establishment Not Ok!\n\n");
     }
 
-    if(llread(fd) == 1 && ESTABLISHMENT == TRUE){
-        printf("Read Ok!\n\n");
-    } else {
-        printf("Read Not Ok!\n\n");
+    if(ESTABLISHMENT == TRUE){
+        if(llread(fd) == 1 ){
+            printf("Read Ok!\n\n");
+        } else {
+            printf("Read Not Ok!\n\n");
+        }
     }
 
-    if(llclose(fd) == 1 && READ == TRUE){
-        printf("Termination Ok!\n\n");
-    } else {
-        printf("Termination Not Ok!\n\n");
+    if(READ == TRUE){
+        if(llclose(fd) == 1){
+            printf("Termination Ok!\n\n");
+        } else {
+            printf("Termination Not Ok!\n\n");
+        }
     }
 
     // The while() cycle should be changed in order to respect the specifications
