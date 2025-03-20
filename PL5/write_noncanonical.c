@@ -60,16 +60,15 @@
 
 #define sleep_time 1
 
-volatile int ESTABLISHMENT = FALSE;
 volatile int STOP = FALSE;
-volatile int DATA_SENT = FALSE;
+volatile int ESTABLISHMENT = FALSE;
+volatile int WRITE = FALSE;
 volatile int TERMINATION = FALSE;
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
 int Ns = 0;
-
 
 void print_array(unsigned char *argv) 
 {   
@@ -109,7 +108,7 @@ void send_DISC(int fd){
     buf_DISC_Write[4] = FLAG;
         
     write(fd, buf_DISC_Write, BUF_SIZE_SET_UA_DISC);
-    printf("DISC send\n");
+    printf("DISC send!\n");
     sleep(sleep_time);
 }
 
@@ -122,7 +121,7 @@ void send_UA(int fd){
     buf_UA[4] = FLAG;
         
     write(fd, buf_UA, BUF_SIZE_SET_UA_DISC);
-    printf("UA send\n\n");
+    printf("UA send!\n\n");
     sleep(sleep_time);
 }
 
@@ -179,7 +178,7 @@ int read_UA(int fd){
             break;
         }
     }
-    printf("UA received\n\n");
+    printf("UA received!\n\n");
     return 1;
 }
 
@@ -231,7 +230,7 @@ int read_DISC(int fd){
                 break;
             }  
     }   
-    printf("DISC received\n");
+    printf("DISC received!\n");
     return 1;
 }
 
@@ -305,6 +304,7 @@ int read_R(int fd){
             case BCC1_RR_0:
                 if(k_RR==3){
                     reply[k_RR] = buf_Reply_Read[0];
+                    //printf("BCC1_RR_0\n");
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -314,6 +314,7 @@ int read_R(int fd){
             case BCC1_RR_1:
                 if(k_RR==3){
                     reply[k_RR] = buf_Reply_Read[0];
+                    //printf("BCC1_RR_1\n");
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -323,6 +324,7 @@ int read_R(int fd){
             case BCC1_REJ_0:
                 if(k_RR==3){
                     reply[k_RR] = buf_Reply_Read[0];
+                    //printf("BCC1_REJ_0\n");
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -332,6 +334,7 @@ int read_R(int fd){
             case BCC1_REJ_1:
                 if(k_RR==3){
                     reply[k_RR] = buf_Reply_Read[0];
+                    //printf("BCC1_REJ_1\n");
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -343,15 +346,27 @@ int read_R(int fd){
                 break;
             }  
     }   
+    //print_array(reply);
 
-    printf("Reply received correctly\n");
-
-    print_array(reply);
+    if(reply[2] == C_RR_0){
+        Ns = 0;
+        llwrite(fd);
+    }
+    if(reply[2] == C_RR_1){
+        Ns = 1;
+        llwrite(fd);
+    }
+    if(reply[2] == C_REJ_0){
+        Ns = 0;
+        llwrite(fd);
+    }
+    if(reply[2] == C_REJ_1){
+        Ns = 1;
+        llwrite(fd);
+    }
 
     return 1;
 }
-
-
 
 unsigned char* byte_stuffing(unsigned char *argv, int *length)
 {
@@ -376,7 +391,7 @@ unsigned char* byte_stuffing(unsigned char *argv, int *length)
     // returnar o comprimento do e stuffed frame
     *length = j;
 
-    print_array(stuffed);
+    //print_array(stuffed);
 
     return stuffed;
 }
@@ -391,7 +406,7 @@ int llopen(int fd){
     buf_SET[4] = FLAG;
     
     write(fd, buf_SET, BUF_SIZE_SET_UA_DISC);
-    printf("SET send\n");
+    printf("SET send!\n");
     sleep(sleep_time);
 
     // Read UA
@@ -411,7 +426,7 @@ int llopen(int fd){
             sleep(1);
 
             if (read_UA(fd) == 1) {
-                DATA_SENT = TRUE;
+                ESTABLISHMENT = TRUE;
                 alarm(0);
                 return 1;
             }
@@ -420,46 +435,48 @@ int llopen(int fd){
     return 0;
 }
 
-
 int llwrite(int fd){
 
     unsigned char buf[BUF_SIZE] = {0};
 
     buf[0] = FLAG;
     buf[1] = A;
-    buf[2] = C_0;
-    buf[3] = BCC1_0;
+    if(Ns == 0){
+        buf[2] = C_0;
+        buf[3] = BCC1_0;    
+    } 
+    if(Ns == 1){
+        buf[2] = C_1;
+        buf[3] = BCC1_1;    
+    } 
     buf[4] = FLAG;
+
     for(int i=5; i<BUF_SIZE-2; i++){
         buf[i] = D;        
     }
-    int BCC2 = get_BCC2(buf);
-    buf[BUF_SIZE-2] = BCC2;
+
+    buf[BUF_SIZE-2] = get_BCC2(buf);
     buf[BUF_SIZE-1] = FLAG;
 
-    for(int i =0; i<BUF_SIZE; i++){
+    /*for(int i =0; i<BUF_SIZE; i++){
         printf("0x%02X\n", buf[i]);
-    }
+    }*/
 
     int stuffed_length = 0;
     unsigned char *stuffed_buf = byte_stuffing(buf, &stuffed_length);
-    printf("Length: %d\n", stuffed_length);
     write(fd, stuffed_buf, stuffed_length);
-    printf("I send\n");
     sleep(sleep_time);
-
- 
 
     int check = read_R(fd);
     if (check == 1) {
-        DATA_SENT = TRUE;
+        WRITE = TRUE;
         Ns=1;
         return 1;
     }
 
     (void)signal(SIGALRM, alarmHandler);
 
-    while (alarmCount < 4 && DATA_SENT == FALSE) {
+    while (alarmCount < 4 && WRITE == FALSE) {
         if (alarmEnabled == FALSE) {       
             write(fd, stuffed_buf, stuffed_length);
             alarm(3);
@@ -467,7 +484,7 @@ int llwrite(int fd){
             sleep(1);
 
             if (read_R(fd) == 1) {
-                DATA_SENT = TRUE;
+                WRITE = TRUE;
                 Ns=1;
                 alarm(0);
                 return 1;
@@ -484,7 +501,7 @@ int llclose(int fd){
 
     // Read DISC
     if(read_DISC(fd)==0){
-        printf("Error DISC\n");
+        printf("Error DISC!\n");
         return 0;
     }
     
@@ -568,20 +585,22 @@ int main(int argc, char *argv[])
         printf("Establishment Not Ok!\n\n");
     }
 
-
-    if(llwrite(fd) == 1 && ESTABLISHMENT == TRUE){
-        printf("Write Ok!\n\n");
-    } else {
-        printf("Write Not Ok!\n\n");
+    if(ESTABLISHMENT == TRUE){
+        if(llwrite(fd) == 1 ){
+            printf("Write Ok!\n\n");
+        } else {
+            printf("Write Not Ok!\n\n");
+        }
     }
 
-    if(llclose(fd) == 1 && DATA_SENT == TRUE){
-        printf("Termination Ok!\n\n");
-    } else {
-        printf("Termination Not Ok!\n\n");
+    if(WRITE == TRUE){
+        if(llclose(fd) == 1){
+            printf("Termination Ok!\n\n");
+        } else {
+            printf("Termination Not Ok!\n\n");
+        }
     }
     
-
     // Wait until all bytes have been written to the serial port
     sleep(1);
 
