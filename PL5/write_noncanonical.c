@@ -26,24 +26,33 @@
 #define FLAG 0x7E
 #define ESCAPE 0x7D
 
+// I frame constants
 #define A 0x03
-#define C 0x40
+#define C_0 0x00
+#define C_1 0x40
 #define D 0x01
-#define BCC1 A^C
+#define BCC1_0 A^C_0
+#define BCC1_1 A^C_1
 
 #define BUF_SIZE_SET_UA_DISC 5
+//SET constants
 #define A_SET 0x03
 #define C_SET 0x03
 #define BCC1_SET A_SET^C_SET
-
+//UA constants
 #define A_UA 0x03
 #define C_UA 0x07
 #define BCC1_UA A_UA^C_UA
-
+//RR constants
 #define C_RR_0 0x05
 #define C_RR_1 0x85
 #define BCC1_RR_0 A^C_RR_0
 #define BCC1_RR_1 A^C_RR_1
+//REJ constants
+#define C_REJ_0 0x01
+#define C_REJ_1 0x81
+#define BCC1_REJ_0 A^C_REJ_0
+#define BCC1_REJ_1 A^C_REJ_1
 
 #define A_DISC 0x03
 #define C_DISC 0x0B
@@ -59,11 +68,13 @@ volatile int TERMINATION = FALSE;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
-int c_RR = 0x85; // porque apos a primeira mensagem ele esperar receber um com o Ns=1, caso espere receber o Ns=0, o C_RR = 0x05
+int Ns = 0;
+
 
 void print_array(unsigned char *argv) 
 {   
     int size = sizeof(argv);
+    printf("%d", size);
     for (int i = 0; i <= size; i++) {
         printf("0x%02X ", argv[i]);
     }
@@ -224,19 +235,22 @@ int read_DISC(int fd){
     return 1;
 }
 
-int read_RR(int fd){
-    // Read RR
-    unsigned char buf_RR_Read[1] = {0};
+int read_R(int fd){
+    // Read possible replies
+    unsigned char reply[BUF_SIZE_SET_UA_DISC] = {0};
+    unsigned char buf_Reply_Read[1] = {0};
     int k_RR = 0;
     volatile int STOP_RR = FALSE;
     
     while (STOP_RR == FALSE) {
-        read(fd,buf_RR_Read,1);
-        switch(buf_RR_Read[0]) {
+        read(fd,buf_Reply_Read,1);
+        switch(buf_Reply_Read[0]) {
             case FLAG:
                 if(k_RR==0){
+                    reply[k_RR] = buf_Reply_Read[0];
                     k_RR++;
                 } else if(k_RR==4){
+                    reply[k_RR] = buf_Reply_Read[0];
                     STOP_RR = TRUE;
                 } else {
                     k_RR=0;
@@ -245,6 +259,16 @@ int read_RR(int fd){
                 break;
             case A_DISC:
                 if(k_RR==1){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break;
+            case C_RR_0:
+                if(k_RR==2){
+                    reply[k_RR] = buf_Reply_Read[0];
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -253,14 +277,61 @@ int read_RR(int fd){
                 break;
             case C_RR_1:
                 if(k_RR==2){
+                    reply[k_RR] = buf_Reply_Read[0];
                     k_RR++;
                 } else {                    
                     k_RR=0;
                     return 0;
                 }
-                break;   
+                break; 
+            case C_REJ_0:
+                if(k_RR==2){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break; 
+            case C_REJ_1:
+                if(k_RR==2){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break;    
+            case BCC1_RR_0:
+                if(k_RR==3){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break; 
             case BCC1_RR_1:
                 if(k_RR==3){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break; 
+            case BCC1_REJ_0:
+                if(k_RR==3){
+                    reply[k_RR] = buf_Reply_Read[0];
+                    k_RR++;
+                } else {                    
+                    k_RR=0;
+                    return 0;
+                }
+                break; 
+            case BCC1_REJ_1:
+                if(k_RR==3){
+                    reply[k_RR] = buf_Reply_Read[0];
                     k_RR++;
                 } else {                    
                     k_RR=0;
@@ -272,9 +343,15 @@ int read_RR(int fd){
                 break;
             }  
     }   
-    printf("RR received\n");
+
+    printf("Reply received correctly\n");
+
+    print_array(reply);
+
     return 1;
 }
+
+
 
 unsigned char* byte_stuffing(unsigned char *argv, int *length)
 {
@@ -312,7 +389,7 @@ int llopen(int fd){
     buf_SET[2] = C_SET;
     buf_SET[3] = BCC1_SET;
     buf_SET[4] = FLAG;
-
+    
     write(fd, buf_SET, BUF_SIZE_SET_UA_DISC);
     printf("SET send\n");
     sleep(sleep_time);
@@ -350,8 +427,8 @@ int llwrite(int fd){
 
     buf[0] = FLAG;
     buf[1] = A;
-    buf[2] = C;
-    buf[3] = BCC1;
+    buf[2] = C_0;
+    buf[3] = BCC1_0;
     buf[4] = FLAG;
     for(int i=5; i<BUF_SIZE-2; i++){
         buf[i] = D;        
@@ -371,10 +448,12 @@ int llwrite(int fd){
     printf("I send\n");
     sleep(sleep_time);
 
-    // Read UA
-    int check = read_RR(fd);
+ 
+
+    int check = read_R(fd);
     if (check == 1) {
         DATA_SENT = TRUE;
+        Ns=1;
         return 1;
     }
 
@@ -387,13 +466,15 @@ int llwrite(int fd){
             alarmEnabled = TRUE;
             sleep(1);
 
-            if (read_RR(fd) == 1) {
+            if (read_R(fd) == 1) {
                 DATA_SENT = TRUE;
+                Ns=1;
                 alarm(0);
                 return 1;
             }
         }
     }
+    
     return 0;
 }
 
