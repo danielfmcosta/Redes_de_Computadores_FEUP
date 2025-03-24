@@ -286,8 +286,8 @@ int llopen(LinkLayer connectionParameters)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
+    newtio.c_cc[VTIME] = global_connectionParameters.timeout * 10; // set timeout to 4 seconds
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -309,7 +309,7 @@ int llopen(LinkLayer connectionParameters)
     if(connectionParameters.role == LlTx){
         // Send SET
         send_SET(global_fd);
-
+        printf("AAAAA");
         // Read UA
         int check = read_UA(global_fd);
         if (check == 1) {
@@ -319,10 +319,10 @@ int llopen(LinkLayer connectionParameters)
 
         (void)signal(SIGALRM, alarmHandler);
 
-        while (alarmCount < 4 && ESTABLISHMENT == FALSE) {
+        while (alarmCount < global_connectionParameters.nTries && ESTABLISHMENT == FALSE) {
             if (alarmEnabled == FALSE) {       
                 send_SET(global_fd); //problema aqui !!!!
-                alarm(3);
+                alarm(global_connectionParameters.timeout);
                 alarmEnabled = TRUE;
                 sleep(1);
 
