@@ -135,24 +135,25 @@ int parseDataPacket(const unsigned char *packet, int packetSize, int *dataSizeOu
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    //   serialPort: Serial port name (e.g., /dev/ttyS0).
-    //   role: Application role {"tx", "rx"}.
-    //   baudrate: Baudrate of the serial port.
-    //   nTries: Maximum number of frame retries.
-    //   timeout: Frame timeout.
-    //   filename: Name of the file to send / receive.
-    //   Build the link layer connection parameters.
-    
+    //   serial port: /dev/ttyS10
+    //   role "tx" or "rx"
+    //   baudrate: baudrate of the serial port.
+    //   nTries: maximum number of frame retries.
+    //   timeout: frame timeout.
+    //   filename: name of the file to send / receive.
+
+    //   build the link layer connection parameters.
     LinkLayer connectionParameters;
-    strcpy(connectionParameters.serialPort, serialPort);
-    connectionParameters.baudRate = baudRate;
+    strcpy(connectionParameters.serialPort, serialPort); //copy string, serial port
+    // set the baud rate, number of retries, and timeout.
+    connectionParameters.baudRate = baudRate; 
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
-    
+    // set the role, transmitter or receiver.
     if (strcmp(role, "tx") == 0) connectionParameters.role = LlTx;
     if (strcmp(role, "rx") == 0) connectionParameters.role = LlRx;
 
-    // Establish connection with the link layer.
+    // establish connection with the link layer.
     int openResult = llopen(connectionParameters);
     if (openResult == -1)
     {
