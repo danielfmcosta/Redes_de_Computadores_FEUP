@@ -321,7 +321,7 @@ int llopen(LinkLayer connectionParameters)
 
         while (alarmCount < 4 && ESTABLISHMENT == FALSE) {
             if (alarmEnabled == FALSE) {       
-                send_SET(global_fd);
+                send_SET(global_fd); //problema aqui !!!!
                 alarm(3);
                 alarmEnabled = TRUE;
                 sleep(1);
@@ -348,6 +348,8 @@ int llopen(LinkLayer connectionParameters)
            
         return 1;  
     }
+
+    return 1;
 }
 
 ////////////////////////////////////////////////
@@ -392,7 +394,7 @@ int llclose(int showStatistics)
         send_UA(global_fd);   
     }
 
-    if(global_connectionParameters.role == LlTx){
+    if(global_connectionParameters.role == LlRx){
         // Read DISC
         if(read_DISC(global_fd)==0){
             printf("Error DISC\n");
@@ -408,6 +410,8 @@ int llclose(int showStatistics)
             return -1;
         }
     }
+
+    printf("\nEnding link-layer protocol application\n");
 
     struct termios oldtio;
 

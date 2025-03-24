@@ -1,10 +1,18 @@
-// application_layer.c
+// Application layer protocol implementation
 
 #include "application_layer.h"
 #include "link_layer.h"
+
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
+
+#include <signal.h>
 
 // Define control field values for packet types
 #define START_CONTROL 2
@@ -127,18 +135,23 @@ int parseDataPacket(const unsigned char *packet, int packetSize, int *dataSizeOu
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    // Build the link layer connection parameters.
+    //   serialPort: Serial port name (e.g., /dev/ttyS0).
+    //   role: Application role {"tx", "rx"}.
+    //   baudrate: Baudrate of the serial port.
+    //   nTries: Maximum number of frame retries.
+    //   timeout: Frame timeout.
+    //   filename: Name of the file to send / receive.
+    //   Build the link layer connection parameters.
+    
     LinkLayer connectionParameters;
-    snprintf(connectionParameters.serialPort, sizeof(connectionParameters.serialPort), "%s", serialPort);
+    strcpy(connectionParameters.serialPort, serialPort);
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
     
-    if (strcmp(role, "tx") == 0)
-        connectionParameters.role = LlTx;
-    else
-        connectionParameters.role = LlRx;
-    
+    if (strcmp(role, "tx") == 0) connectionParameters.role = LlTx;
+    if (strcmp(role, "rx") == 0) connectionParameters.role = LlRx;
+
     // Establish connection with the link layer.
     int openResult = llopen(connectionParameters);
     if (openResult == -1)
@@ -293,5 +306,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
     
     // Close connection (passing TRUE to print statistics if desired).
-    llclose(TRUE);
+    llclose(FALSE);
 }
