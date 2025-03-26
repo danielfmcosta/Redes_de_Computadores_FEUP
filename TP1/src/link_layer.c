@@ -108,6 +108,12 @@ int get_frame_length(unsigned char *frame) {
     return last_flag_index - first_flag_index + 1;
 }
 
+int write_frame(unsigned char *frame) {
+    int frameSize = get_frame_length(frame);
+    int written = write(global_fd, frame, frameSize);
+    return written;
+}
+
 void print_array(unsigned char *argv) 
 {   
     int size = get_frame_length(argv);
@@ -126,7 +132,7 @@ void alarmHandler(int signal)
     }
 }
 
-int get_BCC2(unsigned char *argv, int size){
+int get_BCC2(const unsigned char *argv, int size){
     int BCC2 = argv[0];
     for (int i = 1; i < size; i++){
         BCC2 ^= argv[i];
@@ -134,13 +140,13 @@ int get_BCC2(unsigned char *argv, int size){
     return BCC2;
 }
 
-unsigned char* byte_stuffing(unsigned char *frame) {
-    // Allocate a static buffer (worst-case scenario)
+unsigned char* byte_stuffing(unsigned char *frame, int inputLength) {
     static unsigned char stuffed[MAX_BUF_SIZE] = {0};
     int i, j = 0;
-    stuffed[j] = frame[0];  // copiar a primeira FLAG (0x7E)
+
+    stuffed[j] = frame[0];
     j++;
-    for (i = 1; i < BUF_SIZE-1; i++) {
+    for (i = 1; i < inputLength-1; i++) {
         if (frame[i] == FLAG || frame[i] == ESCAPE) {
             stuffed[j] = ESCAPE;
             j++;
@@ -152,21 +158,19 @@ unsigned char* byte_stuffing(unsigned char *frame) {
         }
     }
 
-    // copiar a ultima FLAG (0x7E)
-    stuffed[j] = frame[BUF_SIZE - 1];
+    stuffed[j] = frame[inputLength - 1];
     return stuffed;
 }
 
-unsigned char* byte_destuffing(unsigned char *argv)
+unsigned char* byte_destuffing(unsigned char *argv, int inputLength)
 {
-    int stuffed_length = get_frame_length(argv);
     static unsigned char destuffed[BUF_SIZE]= {0};
     int i, j = 0;
 
     destuffed[j] = argv[0];
     j++;
 
-    for (i = 1; i < stuffed_length - 1; i++) {
+    for (i = 1; i < inputLength - 1; i++) {
         if (argv[i] == ESCAPE) {
             i++;
             destuffed[j] = argv[i] ^ 0x20;
@@ -177,8 +181,7 @@ unsigned char* byte_destuffing(unsigned char *argv)
         }
     }
 
-    destuffed[j] = argv[stuffed_length - 1];
-
+    destuffed[j] = argv[inputLength - 1];
     return destuffed;
 }
 
@@ -203,7 +206,6 @@ void send_DISC(int fd){
     sleep(sleep_time);
 }
 
-
 void send_reply(int fd, int reply){
     if(reply == C_RR_0){
         const unsigned char RR0_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_RR_0, BCC1_RR_0, FLAG };
@@ -213,7 +215,7 @@ void send_reply(int fd, int reply){
     }else if(reply == C_RR_1){
         const unsigned char RR1_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_RR_1, BCC1_RR_1, FLAG };
         write(fd, RR1_FRAME, BUF_SIZE_REPLY);
-        printf("RR0 send!\n\n");
+        printf("RR1 send!\n\n");
         sleep(sleep_time);
     }else if(reply == C_REJ_0){
         const unsigned char REJ0_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_REJ_0, BCC1_REJ_0, FLAG };
@@ -394,7 +396,6 @@ int read_DISC(int fd){
     return 0;
 }
 
-
 //Returns 0 if it fails and res if it succeeds  (C_RR0,  C_RR1, C_REJ0, C_REJ1)
 int read_Reply(int fd) {
     unsigned char buf;
@@ -474,7 +475,7 @@ int read_Reply(int fd) {
 }
 
 // NEEDS UPDATE
-//Returns 0 if it fails and the 1 if it succeeds
+//Returns 0 if it fails and the size of the frame read
 int read_I(int fd, unsigned char *frame)  {
     unsigned char buf;
     int state = 0;
@@ -492,6 +493,8 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 1;
                 } else {
                     state = 0;
+                    printf("0x%02X\n", buf);
+                    printf("Error: Frame does not start with FLAG\n");
                     return 0;
                 }
                 break;
@@ -502,6 +505,7 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 2;
                 } else {
                     state = 0;
+                    printf("Error: A field incorrect\n");
                     return 0;
                 }
                 break;
@@ -516,6 +520,7 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 3;
                 } else {
                     state = 0;
+                    printf("Error: C field incorrect\n");
                     return 0;
                 }
                 break;
@@ -525,15 +530,16 @@ int read_I(int fd, unsigned char *frame)  {
                     frame[state] = buf;
                     state = 4;
                 }  else {
-                    state = 0; //BCC1 error
+                    state = 0;
+                    printf("Error: BCC1 incorrect\n");
                     return 0; 
                 }
                 break;
 
             case 4: 
-                if (buf == FLAG) {  // End of frame detected
+                if (buf == FLAG) {
                     frame[state + dataIndex] = buf;
-                    return 1;
+                    return state + dataIndex + 1;
                 } else {
                     frame[state + dataIndex] = buf;
                     dataIndex++;
@@ -542,15 +548,9 @@ int read_I(int fd, unsigned char *frame)  {
         
         }
     }
-    return 0; 
+    printf("Error: Frame too long\n");
+    return 0;
 }
-
-int write_frame(unsigned char *frame) {
-    int frameSize = get_frame_length(frame);
-    int written = write(global_fd, frame, frameSize);
-    return written;
-}
-
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -660,8 +660,6 @@ int llopen(LinkLayer connectionParameters)
 // Return number of chars written, or "-1" on error.
 int llwrite(const unsigned char *buf, int bufSize)
 {
-
-    // add header and footer
     unsigned char frame[bufSize + 6];
     frame[0] = FLAG;         
     frame[1] = A;           
@@ -671,62 +669,44 @@ int llwrite(const unsigned char *buf, int bufSize)
     frame[4 + bufSize] = get_BCC2(buf, bufSize);
     frame[5 + bufSize] = FLAG;      
 
-    // Now perform byte stuffing on the fixed frame.
-    printf("Original frame: ");
     print_array(frame);
  
-    unsigned char *stuffed_buf = byte_stuffing(frame);
-
-    printf("Stuffed frame: ");
-    print_array(stuffed_buf);
-
-    int written = write_frame(stuffed_buf);
-    if(written == -1) {
-        printf("Error: Failed to write frame\n");
-        return -1;
-    }
-
-
-    int response = read_Reply(global_fd);
-    if(response == -1){
-        printf("Error: Failed to read reply\n");
-        return -1;
-    }else if(response == 0){
-        printf("RR0 received\n");
-        Ns = 0;
-    }else if(response == 1){
-        printf("RR1 received\n");
-        Ns = 1;
-    }else if(response == 2){
-        printf("REJ0 received\n");
-        Ns = 0;
-        llwrite(buf, bufSize);
-    }else if(response == 3){
-        printf("REJ1 received\n");
-        Ns = 1;
-        llwrite(buf, bufSize);
-    }
-
-    // Set up a signal for retransmission.
+    unsigned char *stuffed_buf = byte_stuffing(frame, bufSize + 6);
+    
+    int retries = 0;
+    int written;
     (void)signal(SIGALRM, alarmHandler);
-    while (alarmCount < 4 && WRITE == 0) {
-        if (alarmEnabled == 0) {
-            // Retransmit the frame
-            write_frame(stuffed_buf);
-            alarm(3);
-            alarmEnabled = 1;
-            sleep(1);
-            if (read_Reply(global_fd) == 1) {
-                WRITE = 1;
-                Ns = 1;
-                alarm(0);
-                return written;
-            }
+
+    while (retries < 3) {
+        printf("[llwrite] Sending stuffed frame: ");
+        //print_array(stuffed_buf);
+        printf("0x%02X\n", stuffed_buf[0]);
+        written = write_frame(stuffed_buf);
+        if (written == -1) {
+            printf("Error: Failed to write frame\n");
+            return -1;
+        }
+        
+        alarm(3);
+        alarmEnabled = 1;
+        int response = read_Reply(global_fd);
+
+        if (response == C_RR_0 || response == C_RR_1) {
+            printf("RR%d received\n", (response == C_RR_0) ? 0 : 1);
+            Ns = (response == C_RR_0) ? 0 : 1;
+            alarm(0);
+            return written;
+        } else if (response == C_REJ_0 || response == C_REJ_1) {
+            printf("REJ%d received\n", (response == C_REJ_0) ? 0 : 1);
+            retries++;
+        } else {
+            printf("Error: Failed to read reply or unexpected response\n");
+            retries++;
         }
     }
-    
 
-    return -1; // Return error if maximum retransmissions are reached
+    printf("Error: Max retransmissions reached. Frame lost.\n");
+    return -1;
 }
 
 ////////////////////////////////////////////////
@@ -735,20 +715,15 @@ int llwrite(const unsigned char *buf, int bufSize)
 // Receive data in packet.
 // Return number of chars read, or "-1" on error.
 int llread(unsigned char *packet) {
-
-
     unsigned char stuffed_frame[BUF_SIZE] = {0};
-
-    if (!read_I(global_fd, stuffed_frame)) {
+    int frame_size = read_I(global_fd, stuffed_frame);
+    if (frame_size == 0) {
         printf("Error: Failed to read I frame\n");
         return -1;
     }
-    
-    printf("Stuffed frame received: ");
-    print_array(stuffed_frame);
 
-    unsigned char *destuffed_frame = byte_destuffing(stuffed_frame);
-    printf("Destuffed frame: ");
+    unsigned char *destuffed_frame = byte_destuffing(stuffed_frame, frame_size);
+    printf("\nDestuffed frame: ");
     print_array(destuffed_frame);
 
 
@@ -758,10 +733,10 @@ int llread(unsigned char *packet) {
         printf("Error: Frame too short (%d bytes)\n", frame_length);
         return -1;
     }
-    
+
     // Verify BCC2:
     // Compute BCC2 over the payload bytes. According to our frame format, payload is from index 4 to (frame_length - 3).
-    int computed_BCC2 = get_BCC2(destuffed_frame);
+    int computed_BCC2 = get_BCC2(&destuffed_frame[4], get_frame_length(destuffed_frame) - 6);
     
     // The received BCC2 is located at index frame_length - 2.
     unsigned char received_BCC2 = destuffed_frame[frame_length - 2];
@@ -770,9 +745,9 @@ int llread(unsigned char *packet) {
         printf("BCC2 error: computed 0x%X, received 0x%X\n", computed_BCC2, received_BCC2);
         // Send REJ depending on the control field.
         if (destuffed_frame[2] == C_0) {
-            send_reply(global_fd, 2); // Send REJ0
+            send_reply(global_fd, C_REJ_0); // Send REJ0
         } else if (destuffed_frame[2] == C_1) {
-            send_reply(global_fd, 3); // Send REJ1
+            send_reply(global_fd, C_REJ_1); // Send REJ1
         }
         return -1;
     }
@@ -783,9 +758,9 @@ int llread(unsigned char *packet) {
     }
     
     if (destuffed_frame[2] == C_0) {
-        send_reply(global_fd, 1); // RR1
+        send_reply(global_fd, C_RR_1); // RR1
     } else if (destuffed_frame[2] == C_1) {
-        send_reply(global_fd, 0); // RR0
+        send_reply(global_fd, C_RR_0); // RR0
     }
     
     return payload_size;
