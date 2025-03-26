@@ -77,6 +77,8 @@ volatile int WRITE = FALSE;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
+
+
 int Ns = 0;
 int Nr = 1;
 
@@ -127,7 +129,6 @@ void alarmHandler(int signal)
     if (ESTABLISHMENT == FALSE) {
         alarmEnabled = FALSE;
         alarmCount++;
-        printf("Alarm #%d - Timeout occurred! Retrying...\n", alarmCount);
     }
 }
 
@@ -140,46 +141,37 @@ int get_BCC2(const unsigned char *argv, int size){
 }
 
 unsigned char* byte_stuffing(unsigned char *frame, int inputLength) {
-    static unsigned char stuffed[MAX_BUF_SIZE] = {0};
+    static unsigned char stuffed[MAX_BUF_SIZE];
+    memset(stuffed, 0, MAX_BUF_SIZE); // Clear the buffer
     int i, j = 0;
 
-    stuffed[j] = frame[0];
-    j++;
-    for (i = 1; i < inputLength-1; i++) {
+    stuffed[j++] = frame[0];
+    for (i = 1; i < inputLength - 1; i++) {
         if (frame[i] == FLAG || frame[i] == ESCAPE) {
-            stuffed[j] = ESCAPE;
-            j++;
-            stuffed[j] = frame[i] ^ 0x20;
-            j++;
+            stuffed[j++] = ESCAPE;
+            stuffed[j++] = frame[i] ^ 0x20;
         } else {
-            stuffed[j] = frame[i];
-            j++;
+            stuffed[j++] = frame[i];
         }
     }
-
     stuffed[j] = frame[inputLength - 1];
     return stuffed;
 }
 
-unsigned char* byte_destuffing(unsigned char *argv, int inputLength)
-{
-    static unsigned char destuffed[BUF_SIZE]= {0};
+unsigned char* byte_destuffing(unsigned char *argv, int inputLength) {
+    static unsigned char destuffed[BUF_SIZE] = {0};
+    memset(destuffed, 0, BUF_SIZE); // Clear the buffer
     int i, j = 0;
 
-    destuffed[j] = argv[0];
-    j++;
-
+    destuffed[j++] = argv[0];
     for (i = 1; i < inputLength - 1; i++) {
         if (argv[i] == ESCAPE) {
             i++;
-            destuffed[j] = argv[i] ^ 0x20;
-            j++;
+            destuffed[j++] = argv[i] ^ 0x20;
         } else {
-            destuffed[j] = argv[i];
-            j++;
+            destuffed[j++] = argv[i];
         }
     }
-
     destuffed[j] = argv[inputLength - 1];
     return destuffed;
 }
@@ -493,7 +485,8 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 1;
                 } else {
                     printf("FLAG? 0x%02X\n", buf);
-                    //state = 0;
+                    state = 0;
+                    return 0;
                 }
                 break;
             
@@ -503,7 +496,8 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 2;
                 } else {
                     printf("A? 0x%02X\n", buf);
-                    //state = 0;
+                    state = 0;
+                    return 0;
                 }
                 break;
 
@@ -517,7 +511,8 @@ int read_I(int fd, unsigned char *frame)  {
                     state = 3;
                 } else {
                     printf("C? 0x%02X\n", buf);
-                    //state = 0;
+                    state = 0;
+                    return 0;
                 }
                 break;
 
@@ -528,7 +523,7 @@ int read_I(int fd, unsigned char *frame)  {
                 }  else {
                     printf("BCC1? 0x%02X\n", buf);
                     state = 0;
-
+                    return 0;
                 }
                 break;
 
@@ -618,11 +613,10 @@ int llopen(LinkLayer connectionParameters)
         while (alarmCount < connectionParameters.nRetransmissions && ESTABLISHMENT == FALSE) {
             if (alarmEnabled == FALSE) {       
                 send_SET(global_fd);
-                printf("SET resent!\n");
-                
+                printf("Timeout occured, will resend SET!\n");
                 alarm(connectionParameters.timeout);  
                 alarmEnabled = TRUE;
-                sleep(sleep_time); 
+                //sleep(sleep_time); 
 
                 if (read_UA(global_fd) == 1) {
                     ESTABLISHMENT = TRUE;
@@ -668,11 +662,17 @@ int llwrite(const unsigned char *buf, int bufSize)
     frame[4 + bufSize] = get_BCC2(buf, bufSize);
     frame[5 + bufSize] = FLAG; 
 
-    printf("\nFrame: ");     
-    print_array(frame, bufSize + 6);
-    printf("Buf Size: %d", bufSize);
+    printf("\nFrame: ");
+    for (int i = 0; i < 6; i++) {
+        printf("0x%02X ", frame[i]);
+    }
+    for (int i = bufSize; i < bufSize + 6; i++) {
+        printf("0x%02X ", frame[i]);
+    }
+    
     unsigned char *stuffed_buf = byte_stuffing(frame, bufSize + 6);
-
+    int stuffed_size = get_frame_length(stuffed_buf);
+    printf("Stuffed Frame length: %d\n", stuffed_size);
     int retries = 0;
     int written;
     (void)signal(SIGALRM, alarmHandler);
@@ -716,6 +716,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 int llread(unsigned char *packet) {
     unsigned char stuffed_frame[BUF_SIZE] = {0};
     int frame_size = read_I(global_fd, stuffed_frame);
+    printf("Frame from read_I size: %d\n", frame_size);
     if (frame_size == 0) {
         printf("Error: Failed to read I frame\n");
         return -1;
@@ -725,7 +726,14 @@ int llread(unsigned char *packet) {
 
     printf("\nDestuffed frame: ");
     int frame_length = get_frame_length(destuffed_frame);
-    print_array(destuffed_frame,frame_length);
+    
+    for (int i = 0; i < 6; i++) {
+        printf("0x%02X ", destuffed_frame[i]);
+    }
+    for (int i = frame_length; i < frame_length + 6; i++) {
+        printf("0x%02X ", destuffed_frame[i]);
+    }
+
     printf("Destuffed Frame length: %d\n", frame_length);
 
 
