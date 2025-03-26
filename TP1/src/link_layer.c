@@ -22,7 +22,7 @@ int global_fd;
 #define FALSE 0
 #define TRUE 1
 
-#define BUF_SIZE 256
+#define BUF_SIZE 512
 #define MAX_BUF_SIZE BUF_SIZE*2
 #define FLAG 0x7E
 #define ESCAPE 0x7D
@@ -82,29 +82,29 @@ int Nr = 1;
 
 #define sleep_time 1
 
-
+// calculate the size of the frame if it ends in a FLAG
 int get_frame_length(unsigned char *frame) {
-    // Find the first and last occurrence of 0x7e
+    // find the first and last occurrence of 0x7e
     int first_flag_index = 0;
     int last_flag_index = 0;
     
-    // Find first flag
+    // find first flag
     for (int i = 0; i < MAX_BUF_SIZE; i++) {
-        if (frame[i] == 0x7e) {
+        if (frame[i] == FLAG) {
             first_flag_index = i;
             break;
         }
     }
     
-    // Find last flag
+    // find last flag
     for (int i = MAX_BUF_SIZE - 1; i > first_flag_index; i--) {
-        if (frame[i] == 0x7e) {
+        if (frame[i] == FLAG) {
             last_flag_index = i;
             break;
         }
     }
     
-    // Calculate the size between the first and last flags
+    // calculate the size between the first and last flags
     return last_flag_index - first_flag_index + 1;
 }
 
@@ -126,9 +126,9 @@ void alarmHandler(int signal)
     }
 }
 
-int get_BCC2(unsigned char *argv){
-    int BCC2 = argv[4];
-    for (int i = 5; i < (BUF_SIZE - 2); i++){
+int get_BCC2(unsigned char *argv, int size){
+    int BCC2 = argv[0];
+    for (int i = 1; i < size; i++){
         BCC2 ^= argv[i];
     }
     return BCC2;
@@ -203,24 +203,24 @@ void send_DISC(int fd){
     sleep(sleep_time);
 }
 
-// NEEDS UPDATE
+
 void send_reply(int fd, int reply){
-    if(reply == 0){
+    if(reply == C_RR_0){
         const unsigned char RR0_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_RR_0, BCC1_RR_0, FLAG };
         write(fd, RR0_FRAME, BUF_SIZE_REPLY);
         printf("RR0 send!\n\n");
         sleep(sleep_time);
-    }else if(reply == 1){
-        const unsigned char RR0_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_RR_0, BCC1_RR_0, FLAG };
-        write(fd, RR0_FRAME, BUF_SIZE_REPLY);
+    }else if(reply == C_RR_1){
+        const unsigned char RR1_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_RR_1, BCC1_RR_1, FLAG };
+        write(fd, RR1_FRAME, BUF_SIZE_REPLY);
         printf("RR0 send!\n\n");
         sleep(sleep_time);
-    }else if(reply == 2){
+    }else if(reply == C_REJ_0){
         const unsigned char REJ0_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_REJ_0, BCC1_REJ_0, FLAG };
         write(fd, REJ0_FRAME, BUF_SIZE_REPLY);
         printf("REJ0 send!\n\n");
         sleep(sleep_time);
-    }else if(reply == 3){
+    }else if(reply == C_REJ_1){
         const unsigned char REJ1_FRAME[BUF_SIZE_REPLY] = { FLAG, A, C_REJ_1, BCC1_REJ_1, FLAG };
         write(fd, REJ1_FRAME, BUF_SIZE_REPLY);
         printf("REJ1 send!\n\n");
@@ -394,13 +394,13 @@ int read_DISC(int fd){
     return 0;
 }
 
-// NEEDS UPDATE
-//Returns 0 if it fails and the C if it succeeds
-int read_R(int fd) {
+
+//Returns 0 if it fails and res if it succeeds  (C_RR0,  C_RR1, C_REJ0, C_REJ1)
+int read_Reply(int fd) {
     unsigned char buf;
     int state = 0;
     unsigned char reply[BUF_SIZE_REPLY] = {0};
-
+    int res =0;
     while (state < BUF_SIZE_REPLY) {
         int bytesRead = read(fd, &buf, 1);
         if (bytesRead <= 0) return 0;
@@ -430,15 +430,19 @@ int read_R(int fd) {
                 if (buf == C_RR_0) {
                     reply[state] = buf;
                     state = 3;
+                    res=C_RR_0;
                 } else if(buf == C_RR_1) {
                     reply[state] = buf;
                     state = 3;
+                    res=C_RR_1;
                 } else if(buf == C_REJ_0) {
                     reply[state] = buf;
                     state = 3;
+                    res=C_REJ_0;
                 }else if(buf == C_REJ_1) {
                     reply[state] = buf;
                     state = 3;
+                    res=C_REJ_0;
                 } else {
                     state = 0;
                     return 0;
@@ -458,20 +462,7 @@ int read_R(int fd) {
             case 4:
                 if (buf == FLAG) {
                     reply[state] = buf;
-                    printf("R frame received: ");
-                    if (reply[2] == C_RR_0) {
-                        printf("RR0 (Acknowledgment for I0)\n");
-                        return C_RR_0;
-                    } else if (reply[2] == C_RR_1) {
-                        printf("RR1 (Acknowledgment for I1)\n");
-                        return C_RR_1;
-                    } else if (reply[2] == C_REJ_0) {
-                        printf("REJ0 (Error in I0, retransmit)\n");
-                        return C_REJ_0;
-                    } else if (reply[2] == C_REJ_1) {
-                        printf("REJ1 (Error in I1, retransmit)\n");
-                        return C_REJ_1;
-                    }
+                    return res;
                 } else {
                     state = 0;
                     return 0;
@@ -557,7 +548,6 @@ int read_I(int fd, unsigned char *frame)  {
 int write_frame(unsigned char *frame) {
     int frameSize = get_frame_length(frame);
     int written = write(global_fd, frame, frameSize);
-    sleep(sleep_time);  // Allow time for the receiver to process the frame
     return written;
 }
 
@@ -602,6 +592,7 @@ int llopen(LinkLayer connectionParameters)
     // adjust timeout settings
     newtio.c_cc[VTIME] = connectionParameters.timeout * 10;
     newtio.c_cc[VMIN] = 0;
+
 
     tcflush(global_fd, TCIOFLUSH);
     if (tcsetattr(global_fd, TCSANOW, &newtio) == -1)
@@ -659,7 +650,7 @@ int llopen(LinkLayer connectionParameters)
         }
     }
 
-    return -1;
+    return 1;
 }
 
 ////////////////////////////////////////////////
@@ -669,49 +660,51 @@ int llopen(LinkLayer connectionParameters)
 // Return number of chars written, or "-1" on error.
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    unsigned char frame[BUF_SIZE];  // Declare a proper array
-    memcpy(frame, buf, bufSize);  // Copy data from buf to frame
 
-    print_array(frame);
-    printf("Size: %d\n", bufSize);
-    write_frame(frame);
-
-    // Build the fixed frame (10 bytes total)
-    /*unsigned char frame[BUF_SIZE];
-    frame[0] = FLAG;         // Start FLAG
-    frame[1] = A;            // Address field
-    frame[2] = C_0;          // Control field (we always use C_0 for now)
-    frame[3] = A ^ C_0;      
-    frame[4] = FLAG;         
-
-    frame[5] = ESCAPE;
-    frame[6] = 0x00;
-    frame[7] = 0x01;
-
-    // Calculate BCC2 over the payload bytes (indexes 5 to 7)
-    unsigned char bcc2 = frame[4] ^ frame[5] ^ frame[6] ^ frame[7];
-    frame[8] = bcc2;         // BCC2 over the payload
-    frame[9] = FLAG;         // Closing FLAG
+    // add header and footer
+    unsigned char frame[bufSize + 6];
+    frame[0] = FLAG;         
+    frame[1] = A;           
+    frame[2] = (Ns == 0) ? C_0 : C_1;    
+    frame[3] = frame[1] ^ frame[2]; 
+    memcpy(&frame[4], buf, bufSize);
+    frame[4 + bufSize] = get_BCC2(buf, bufSize);
+    frame[5 + bufSize] = FLAG;      
 
     // Now perform byte stuffing on the fixed frame.
     printf("Original frame: ");
     print_array(frame);
-
  
     unsigned char *stuffed_buf = byte_stuffing(frame);
+
     printf("Stuffed frame: ");
     print_array(stuffed_buf);
 
-
-    // Write the stuffed frame to the serial port.
     int written = write_frame(stuffed_buf);
+    if(written == -1) {
+        printf("Error: Failed to write frame\n");
+        return -1;
+    }
 
-    // Wait for a reply from the receiver.
-    int check = read_R(global_fd);
-    if (check == 1) {
-        WRITE = 1;
-        Ns = 1;  // Update sequence number if needed
-        return written;
+
+    int response = read_Reply(global_fd);
+    if(response == -1){
+        printf("Error: Failed to read reply\n");
+        return -1;
+    }else if(response == 0){
+        printf("RR0 received\n");
+        Ns = 0;
+    }else if(response == 1){
+        printf("RR1 received\n");
+        Ns = 1;
+    }else if(response == 2){
+        printf("REJ0 received\n");
+        Ns = 0;
+        llwrite(buf, bufSize);
+    }else if(response == 3){
+        printf("REJ1 received\n");
+        Ns = 1;
+        llwrite(buf, bufSize);
     }
 
     // Set up a signal for retransmission.
@@ -723,14 +716,14 @@ int llwrite(const unsigned char *buf, int bufSize)
             alarm(3);
             alarmEnabled = 1;
             sleep(1);
-            if (read_R(global_fd) == 1) {
+            if (read_Reply(global_fd) == 1) {
                 WRITE = 1;
                 Ns = 1;
                 alarm(0);
                 return written;
             }
         }
-    }*/
+    }
     
 
     return -1; // Return error if maximum retransmissions are reached
@@ -741,14 +734,10 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 // Receive data in packet.
 // Return number of chars read, or "-1" on error.
-
 int llread(unsigned char *packet) {
-    
-    read(global_fd, packet, BUF_SIZE);
-    print_array(packet);
-    int payload_size = get_frame_length(packet) - 6;
 
-    /*unsigned char stuffed_frame[BUF_SIZE] = {0};
+
+    unsigned char stuffed_frame[BUF_SIZE] = {0};
 
     if (!read_I(global_fd, stuffed_frame)) {
         printf("Error: Failed to read I frame\n");
@@ -797,7 +786,7 @@ int llread(unsigned char *packet) {
         send_reply(global_fd, 1); // RR1
     } else if (destuffed_frame[2] == C_1) {
         send_reply(global_fd, 0); // RR0
-    }*/
+    }
     
     return payload_size;
 }
