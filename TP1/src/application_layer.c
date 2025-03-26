@@ -14,16 +14,17 @@
 
 #include <signal.h>
 
+// tipos de byte de controlo
+#define START 0x02
+#define END 0x03
+#define DATA 0x01
 
-#define START_CONTROL 0x02
-#define END_CONTROL   0x03
-#define DATA_CONTROL  0x01
+// tipos de TLV
+#define TLV_SIZE 0x00 
+#define TLV_NAME 0x01 
 
-#define TLV_FILE_SIZE 0x00  // file size
-#define TLV_FILE_NAME 0x01  // file name
-
-// maximum payload size for data packets 
-#define MAX_PAYLOAD_SIZE 502 // 512 - 6 (header and footer) - 4 (control field and length)
+// maximo payload size para os data packets 
+#define MAX_PACKET_DATA_SIZE 502 // 512 - 6 (cabeçalho e rodapé) - 4 (controlo e TLV)
 
 // defines a maximum file name length 
 #define MAX_FILENAME 494 // MAX_CONTROL_PACKET_SIZE - 1 (control field) - 1 (TLV size) - 4 (TLV size length) -  1 (TLV name) - 1 (TLV name length) - 2 (just in case)
@@ -53,7 +54,7 @@ int buildControlPacket(int controlType, long fileSize, const char *fileName, uns
     index++;
     
     // TLV for file size:
-    packet[index] = TLV_FILE_SIZE; 
+    packet[index] = TLV_SIZE; 
     index++;
     packet[index] = 4;             
     index++;
@@ -67,7 +68,7 @@ int buildControlPacket(int controlType, long fileSize, const char *fileName, uns
     index++;
    
     // TLV for file name:
-    packet[index] = TLV_FILE_NAME;  // Type
+    packet[index] = TLV_NAME;  // Type
     index++;
     packet[index] = fileNameLen;      // Length: file name length
     index++;
@@ -81,7 +82,7 @@ int buildControlPacket(int controlType, long fileSize, const char *fileName, uns
 // Returns the packet size.
 int buildDataPacket(const unsigned char *data, int dataSize, unsigned char *packet) {
     int index = 0;
-    packet[index] = DATA_CONTROL; 
+    packet[index] = DATA; 
     index++;
 
     // k = L2 * 64 + L1, since we are using smaller sizes of 512 total bytes
@@ -108,7 +109,7 @@ int parseControlPacket(const unsigned char *packet, int packetSize, int *control
     
     index++; 
 
-    if (packet[index] != TLV_FILE_SIZE)
+    if (packet[index] != TLV_SIZE)
         return -1; 
     
     index++;
@@ -132,7 +133,7 @@ int parseControlPacket(const unsigned char *packet, int packetSize, int *control
         return -1;
 
 
-    if (packet[index] != TLV_FILE_NAME)
+    if (packet[index] != TLV_NAME)
         return -1;
     index++;
     int nameLen = packet[index]; 
@@ -153,7 +154,7 @@ int parseDataPacket(const unsigned char *packet, int packetSize, int *dataSizeOu
         return -1;
     
     int index = 0;
-    if (packet[index++] != DATA_CONTROL)
+    if (packet[index++] != DATA)
         return -1;
     
     int L2 = packet[index++];
@@ -219,7 +220,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         // build and send START packet
         unsigned char controlPacket[MAX_CONTROL_PACKET_SIZE];
-        int controlPacketSize = buildControlPacket(START_CONTROL, fileSize, filename, controlPacket);
+        int controlPacketSize = buildControlPacket(START, fileSize, filename, controlPacket);
         int write_start = llwrite(controlPacket, controlPacketSize);
         if (controlPacketSize < 0 || write_start < 0) {
 
@@ -230,24 +231,45 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         
         // read file in chunks and send as data packets
-        unsigned char fileBuffer[MAX_PAYLOAD_SIZE];
-        unsigned char dataPacket[1 + 2 + MAX_PAYLOAD_SIZE];
+        unsigned char fileBuffer[MAX_PACKET_DATA_SIZE];
+        unsigned char dataPacket[1 + 2 + MAX_PACKET_DATA_SIZE];
         int bytesRead;
-        int data_sent = 0;
-        while ((bytesRead = fread(fileBuffer, 1, MAX_PAYLOAD_SIZE, fp)) > 0) {
+        int written = 0;
+        long totalSent = 0; 
+
+        // Set a bar width (e.g., 50 characters)
+        const int barWidth = 50;
+
+        while ((bytesRead = fread(fileBuffer, 1, MAX_PACKET_DATA_SIZE, fp)) > 0) {
             int dataPacketSize = buildDataPacket(fileBuffer, bytesRead, dataPacket);
-            data_sent = llwrite(dataPacket, dataPacketSize);
-            if (data_sent < 0) {
+            written = llwrite(dataPacket, dataPacketSize);
+            if (written < 0) {
                 fprintf(stderr, "Error sending data packet\n");
                 fclose(fp);
                 llclose(0);
                 return;
             }
+            totalSent += bytesRead;
+            printf("\rSent %ld bytes\n", totalSent);
+            // Calculate progress percentage
+            int percent = (int)((totalSent * 100) / fileSize);
+            
+            // Print loading bar
+            printf("\r["); // return carriage to start of line
+            int pos = (percent * barWidth) / 100;
+            for (int i = 0; i < barWidth; i++) {
+                if (i < pos)
+                    printf("#");
+                else
+                    printf(" ");
+            }
+            printf("] %d%%", percent);
+            fflush(stdout);
         }
         fclose(fp);
         
         // build and send END packet
-        controlPacketSize = buildControlPacket(END_CONTROL, fileSize, filename, controlPacket);
+        controlPacketSize = buildControlPacket(END, fileSize, filename, controlPacket);
         int write_end = llwrite(controlPacket, controlPacketSize);
         if (controlPacketSize < 0 || write_end < 0) {
             fprintf(stderr, "Error sending END packet\n");
@@ -259,7 +281,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
     else if (connectionParameters.role == LlRx) {
         // RECEIVER
-        unsigned char packetBuffer[1 + 2 + MAX_PAYLOAD_SIZE] = {0};
+        unsigned char packetBuffer[1 + 2 + MAX_PACKET_DATA_SIZE] = {0};
         int packetSize;
         
         // wait for the START packet
@@ -275,7 +297,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         long fileSize = 0;
         char receivedFileName[MAX_FILENAME] = {0};
         int parse_result = parseControlPacket(packetBuffer, packetSize, &ctrlType, &fileSize, receivedFileName);
-        if (parse_result < 0 || ctrlType != START_CONTROL) {
+        if (parse_result < 0 || ctrlType != START) {
             fprintf(stderr, "Error: Expected START packet\n");
             llclose(0);
             return;
@@ -291,6 +313,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         
         long totalBytesReceived = 0;
+
+        const int barWidth = 50;
+
         int finish = 1;
         while (finish) {
             packetSize = llread(packetBuffer);
@@ -302,9 +327,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
             
             int packetType = packetBuffer[0];
-            if (packetType == DATA_CONTROL) {
+            if (packetType == DATA) {
                 int payloadSize;
-                unsigned char fileBuffer[MAX_PAYLOAD_SIZE];
+                unsigned char fileBuffer[MAX_PACKET_DATA_SIZE];
                 if (parseDataPacket(packetBuffer, packetSize, &payloadSize, fileBuffer) < 0) {
                     fprintf(stderr, "Error parsing data packet\n");
                     fclose(fp);
@@ -313,10 +338,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 fwrite(fileBuffer, 1, payloadSize, fp);
                 totalBytesReceived += payloadSize;
+                
+                // Update loading bar
+                int percent = (int)((totalBytesReceived * 100) / fileSize);
+                printf("\r["); // Return carriage to start of line
+                int pos = (percent * barWidth) / 100;
+                for (int i = 0; i < barWidth; i++) {
+                    if (i < pos)
+                        printf("#");
+                    else
+                        printf(" ");
+                }
+                printf("] %d%%", percent);
+                fflush(stdout);
             }
-            else if (packetType == END_CONTROL) {
+            else if (packetType == END) {
                 // Validate the END packet if desired
-                if (parseControlPacket(packetBuffer, packetSize, &ctrlType, &fileSize, receivedFileName) < 0 || ctrlType != END_CONTROL) {
+                if (parseControlPacket(packetBuffer, packetSize, &ctrlType, &fileSize, receivedFileName) < 0 || ctrlType != END) {
                     fprintf(stderr, "Error parsing END packet\n");
                     fclose(fp);
                     llclose(0);
