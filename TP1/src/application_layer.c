@@ -334,7 +334,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         
     }
     
-    // Close the connection (pass FALSE if you don't want statistics printed)
+    // close the connection pass FALSE we don't want statistics printed
     llclose(FALSE);
 }
 
