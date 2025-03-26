@@ -114,9 +114,8 @@ int write_frame(unsigned char *frame) {
     return written;
 }
 
-void print_array(unsigned char *argv) 
+void print_array(unsigned char *argv, int size) 
 {   
-    int size = get_frame_length(argv);
     for (int i = 0; i < size; i++) {
         printf("0x%02X ", argv[i]);
     }
@@ -443,7 +442,7 @@ int read_Reply(int fd) {
                 }else if(buf == C_REJ_1) {
                     reply[state] = buf;
                     state = 3;
-                    res=C_REJ_0;
+                    res=C_REJ_1;
                 } else {
                     state = 0;
                     return 0;
@@ -463,6 +462,7 @@ int read_Reply(int fd) {
             case 4:
                 if (buf == FLAG) {
                     reply[state] = buf;
+                    state = 0;
                     return res;
                 } else {
                     state = 0;
@@ -492,10 +492,8 @@ int read_I(int fd, unsigned char *frame)  {
                     frame[state] = buf;
                     state = 1;
                 } else {
-                    state = 0;
-                    printf("0x%02X\n", buf);
-                    printf("Error: Frame does not start with FLAG\n");
-                    return 0;
+                    printf("FLAG? 0x%02X\n", buf);
+                    //state = 0;
                 }
                 break;
             
@@ -504,9 +502,8 @@ int read_I(int fd, unsigned char *frame)  {
                     frame[state] = buf;
                     state = 2;
                 } else {
-                    state = 0;
-                    printf("Error: A field incorrect\n");
-                    return 0;
+                    printf("A? 0x%02X\n", buf);
+                    //state = 0;
                 }
                 break;
 
@@ -519,9 +516,8 @@ int read_I(int fd, unsigned char *frame)  {
                     frame[state] = buf;
                     state = 3;
                 } else {
-                    state = 0;
-                    printf("Error: C field incorrect\n");
-                    return 0;
+                    printf("C? 0x%02X\n", buf);
+                    //state = 0;
                 }
                 break;
 
@@ -530,16 +526,19 @@ int read_I(int fd, unsigned char *frame)  {
                     frame[state] = buf;
                     state = 4;
                 }  else {
+                    printf("BCC1? 0x%02X\n", buf);
                     state = 0;
-                    printf("Error: BCC1 incorrect\n");
-                    return 0; 
+
                 }
                 break;
 
             case 4: 
                 if (buf == FLAG) {
                     frame[state + dataIndex] = buf;
-                    return state + dataIndex + 1;
+                    res = state + dataIndex + 1;
+                    state = 0;
+                    dataIndex = 0;
+                    return res;
                 } else {
                     frame[state + dataIndex] = buf;
                     dataIndex++;
@@ -665,14 +664,15 @@ int llwrite(const unsigned char *buf, int bufSize)
     frame[1] = A;           
     frame[2] = (Ns == 0) ? C_0 : C_1;    
     frame[3] = frame[1] ^ frame[2]; 
-    memcpy(&frame[4], buf, bufSize);
+    memcpy(&frame[4], buf, bufSize);   
     frame[4 + bufSize] = get_BCC2(buf, bufSize);
-    frame[5 + bufSize] = FLAG;      
+    frame[5 + bufSize] = FLAG; 
 
-    print_array(frame);
- 
+    printf("\nFrame: ");     
+    print_array(frame, bufSize + 6);
+    printf("Buf Size: %d", bufSize);
     unsigned char *stuffed_buf = byte_stuffing(frame, bufSize + 6);
-    
+
     int retries = 0;
     int written;
     (void)signal(SIGALRM, alarmHandler);
@@ -680,8 +680,7 @@ int llwrite(const unsigned char *buf, int bufSize)
     while (retries < 3) {
         printf("[llwrite] Sending stuffed frame: ");
         //print_array(stuffed_buf);
-        printf("0x%02X\n", stuffed_buf[0]);
-        written = write_frame(stuffed_buf);
+        written = write_frame(stuffed_buf); 
         if (written == -1) {
             printf("Error: Failed to write frame\n");
             return -1;
@@ -723,11 +722,13 @@ int llread(unsigned char *packet) {
     }
 
     unsigned char *destuffed_frame = byte_destuffing(stuffed_frame, frame_size);
+
     printf("\nDestuffed frame: ");
-    print_array(destuffed_frame);
-
-
     int frame_length = get_frame_length(destuffed_frame);
+    print_array(destuffed_frame,frame_length);
+    printf("Destuffed Frame length: %d\n", frame_length);
+
+
     if (frame_length <= 6) {
         // Must be at least 6 bytes: FLAG, A, C, BCC1, BCC2, FLAG.
         printf("Error: Frame too short (%d bytes)\n", frame_length);
@@ -746,8 +747,10 @@ int llread(unsigned char *packet) {
         // Send REJ depending on the control field.
         if (destuffed_frame[2] == C_0) {
             send_reply(global_fd, C_REJ_0); // Send REJ0
+            llread(packet);
         } else if (destuffed_frame[2] == C_1) {
             send_reply(global_fd, C_REJ_1); // Send REJ1
+            llread(packet);
         }
         return -1;
     }
