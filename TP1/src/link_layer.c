@@ -81,6 +81,8 @@ int alarmEnabled = FALSE;
 int alarmCount = 0;
 
 int Ns = 0;
+int Nr = 0;
+
 
 // Calcula o tamanho do frame, se e só se a frame começar e acabar com uma FLAG
 int get_frame_length(unsigned char *frame) {
@@ -476,7 +478,7 @@ int read_I(int fd, unsigned char *frame) {
 
     while (state+dataIndex < MAX_BUF_SIZE) {
         res = read(fd, &buf, 1);
-        if (res <= 0) return 0;
+        if(res <= 0) return 0;
 
         switch (state) {
             case 0: 
@@ -485,7 +487,6 @@ int read_I(int fd, unsigned char *frame) {
                     state = 1;
                 } else {
                     state = 0;
-                    return 0;
                 }
                 break;
             
@@ -495,7 +496,6 @@ int read_I(int fd, unsigned char *frame) {
                     state = 2;
                 } else {
                     state = 0;
-                    return 0;
                 }
                 break;
 
@@ -509,7 +509,6 @@ int read_I(int fd, unsigned char *frame) {
                     state = 3;
                 } else {
                     state = 0;
-                    return 0;
                 }
                 break;
 
@@ -519,7 +518,6 @@ int read_I(int fd, unsigned char *frame) {
                     state = 4;
                 }  else {
                     state = 0;
-                    return 0;
                 }
                 break;
 
@@ -538,6 +536,7 @@ int read_I(int fd, unsigned char *frame) {
         
         }
     }
+    state=0;
     return 0;
 }
 
@@ -579,6 +578,7 @@ int llopen(LinkLayer connectionParameters) {
     newtio.c_oflag = 0;
     newtio.c_lflag = 0;
     
+
     newtio.c_cc[VTIME] = connectionParameters.timeout * 10;
     newtio.c_cc[VMIN] = 0;
 
@@ -609,7 +609,7 @@ int llopen(LinkLayer connectionParameters) {
         while (alarmCount < connectionParameters.nRetransmissions && ESTABLISHMENT == FALSE) {
             if (alarmEnabled == FALSE) {       
                 send_SET(global_fd);
-                alarm(connectionParameters.timeout);  
+                alarm(alarm_global);  
                 alarmEnabled = TRUE;
 
                 if (read_UA(global_fd) == 1) {
@@ -649,7 +649,8 @@ int llwrite(const unsigned char *buf, int bufSize) {
     unsigned char frame[bufSize + 6];
     frame[0] = FLAG;         
     frame[1] = A;           
-    frame[2] = (Ns == 0) ? C_0 : C_1;    
+    frame[2] = (Ns == 0) ? C_0 : C_1;   
+    
     frame[3] = frame[1] ^ frame[2]; 
     memcpy(&frame[4], buf, bufSize);   
     frame[4 + bufSize] = get_BCC2(buf, bufSize);
@@ -670,12 +671,11 @@ int llwrite(const unsigned char *buf, int bufSize) {
             return -1;
         }
         
-        alarm(3);
+        alarm(4);
         alarmEnabled = 1;
         int response = read_Reply(global_fd);
-
         // Verificação da resposta em casos como RR0, RR1, REJ0, REJ1
-        if (response == C_RR_0 || response == C_RR_1) {
+        if ((response == C_RR_0 && Ns ==1 ) || (response == C_RR_1 && Ns ==0)){
             Ns = (response == C_RR_0) ? 0 : 1;
             alarm(0);
             return written;
@@ -700,9 +700,8 @@ int llread(unsigned char *packet) {
     unsigned char stuffed_frame[BUF_SIZE] = {0};
     int frame_size = read_I(global_fd, stuffed_frame);
 
-    if (frame_size == 0) {
-        printf("Error: Read I Frame!\n");
-        return -1;
+    while(frame_size == 0) {
+        frame_size = read_I(global_fd, stuffed_frame);
     }
 
     // Destuffing do frame
@@ -720,7 +719,7 @@ int llread(unsigned char *packet) {
     
     if (computed_BCC2 != received_BCC2) {
         // Em caso de erro, ou seja, BCC2 não é o esperado, envia REJ0 ou REJ1
-        if (destuffed_frame[2] == C_0) {
+        if ((destuffed_frame[2] == C_0)) {
             send_reply(global_fd, C_REJ_0);
             llread(packet);
         } else if (destuffed_frame[2] == C_1) {
@@ -737,12 +736,22 @@ int llread(unsigned char *packet) {
     }
     
     // Caso o frame seja válido, envia RR0 ou RR1
-    if (destuffed_frame[2] == C_0) {
+    if ((destuffed_frame[2] == C_0 && Nr == 0)){
+        Nr = (destuffed_frame[2] == C_1) ? 0 : 1;
         send_reply(global_fd, C_RR_1);
-    } else if (destuffed_frame[2] == C_1) {
+
+    } else if ((destuffed_frame[2] == C_0 && Nr == 1)) {
+        memset(packet,0, payload_size);
+        send_reply(global_fd, C_RR_1);
+
+    } else if ((destuffed_frame[2] == C_1 && Nr == 1)) {
+        Nr = (destuffed_frame[2] == C_1) ? 0 : 1;
+        send_reply(global_fd, C_RR_0);
+    } else if ((destuffed_frame[2] == C_1 && Nr == 0)) {
+        memset(packet,0, payload_size);
         send_reply(global_fd, C_RR_0);
     }
-    
+
     return payload_size;
 }
 
