@@ -588,7 +588,7 @@ int llopen(LinkLayer connectionParameters) {
         return -1;
     }
 
-    printf("\n 🐧 \n");
+    printf("\n 🐧 \n\n");
 
     if (connectionParameters.role == LlTx) {
         // Transmissor:
@@ -785,7 +785,7 @@ int llclose(int showStatistics)
     }
 
     // Finaliza o processo e fecha a ligação
-    printf("\n 🐧 \n");
+    printf("\n 🐧 \n\n");
     close(global_fd);
     return 1;
 }
