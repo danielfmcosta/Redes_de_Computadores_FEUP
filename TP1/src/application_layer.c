@@ -368,9 +368,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 finish = 0;
                 printf("\nEND packet received\n");
             }
-            else {
-                printf("\nUnknown packet type: %d\n", packetType);
-            }
+            
         }
         fclose(fp);
         printf("\nFile received successfully, total bytes = %ld\n", totalBytesReceived);
