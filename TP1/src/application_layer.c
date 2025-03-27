@@ -24,68 +24,72 @@
 #define TLV_NAME 0x01 
 
 // maximo payload size para os data packets 
-#define MAX_PACKET_DATA_SIZE 502 // 512 - 6 (cabeçalho e rodapé) - 4 (controlo e TLV)
+#define MAX_PACKET_DATA_SIZE 502 // 512 - 6 (cabeçalho e rodapé) - 3 (controlo e L2 e L1) - 1 (só por garantia)
 
-// defines a maximum file name length 
-#define MAX_FILENAME 494 // MAX_CONTROL_PACKET_SIZE - 1 (control field) - 1 (TLV size) - 4 (TLV size length) -  1 (TLV name) - 1 (TLV name length) - 2 (just in case)
+// maximo tamanho de um nome de ficheiro
+#define MAX_FILENAME 494 // MAX_CONTROL_PACKET_SIZE - 1 (controlo) - 1 (TLV_SIZE) - 4 (TLV size length) -  1 (TLV_NAME) - 1 (TLV name length) - 2 (só por garantia)
 
 // maximum control packet size:
-#define MAX_CONTROL_PACKET_SIZE 504 // 256 - 6 (header and footer) - 2 (just in case) 
+#define MAX_CONTROL_PACKET_SIZE 504 // 512 - 6 (header and footer) - 2 (só por garantia) 
 
+// função para imprimir um array de bytes
 void printArray(const unsigned char *array, int length) {
     printf("Array (length %d): ", length);
     for (int i = 0; i < length; i++) {
-        printf("%02X ", array[i]); // Print each byte in hex format
+        printf("%02X ", array[i]);
     }
     printf("\n");
 }
 
-// builds a control packet START or END
-// returns the packet size, or -1 if an error occurs.
+// constroi o pacote de controlo START ou END
+// retorna o tamanho do pacote, ou -1 se ocorrer algum erro
 int buildControlPacket(int controlType, long fileSize, const char *fileName, unsigned char *packet) {
     int fileNameLen = strlen(fileName);
     if (fileNameLen > MAX_FILENAME) {
-        fprintf(stderr, "Error: file name too long.\n");
+        printf("Error: file name too long.\n");
         return -1;
     }
    
     int index = 0;
-    packet[index] = controlType; // START or END
+    packet[index] = controlType;  // START ou END
     index++;
     
-    // TLV for file size:
-    packet[index] = TLV_SIZE; 
+    packet[index] = TLV_SIZE; // TLV_SIZE
     index++;
-    packet[index] = 4;             
+    packet[index] = 4;  // tamanho do tamanho do ficheiro         
     index++;
-    packet[index] = (fileSize >> 24) & 0xFF;
+    // tamanho do ficheiro em 4 bytes em big-endian
+    packet[index] = (fileSize >> 24) & 0xFF; 
     index++;
-    packet[index] = (fileSize >> 16) & 0xFF;
+    packet[index] = (fileSize >> 16) & 0xFF; 
     index++;
-    packet[index] = (fileSize >> 8) & 0xFF;
+    packet[index] = (fileSize >> 8) & 0xFF; 
     index++;
-    packet[index] = fileSize & 0xFF;
+    packet[index] = fileSize & 0xFF; 
     index++;
    
-    // TLV for file name:
-    packet[index] = TLV_NAME;  // Type
+    packet[index] = TLV_NAME;  // TLV_NAME
     index++;
-    packet[index] = fileNameLen;      // Length: file name length
+    packet[index] = fileNameLen; // tamanho do nome do ficheiro    
     index++;
-    memcpy(&packet[index], fileName, fileNameLen);
+    memcpy(&packet[index], fileName, fileNameLen); // nome do ficheiro
     index += fileNameLen;
 
     return index;
 }
 
-// builds a data packet into the provided buffer.
-// Returns the packet size.
+// constroi o pacote de dados
+// retorna o tamanho do pacote
 int buildDataPacket(const unsigned char *data, int dataSize, unsigned char *packet) {
     int index = 0;
+    if(dataSize > MAX_PACKET_DATA_SIZE) {
+        printf("Error: data packet size too large.\n");
+        return -1;
+    }
     packet[index] = DATA; 
     index++;
 
-    // k = L2 * 64 + L1, since we are using smaller sizes of 512 total bytes
+    // k = L2 * 64 + L1, como temos pacotes de tamanho máximo 502, não faz sentido utilizar 256 como diz nos slides
     packet[index] = (dataSize / 64);  
     index++;
     packet[index] = (dataSize % 64);        
@@ -97,28 +101,28 @@ int buildDataPacket(const unsigned char *data, int dataSize, unsigned char *pack
     return index;
 }
 
-// Parse a control packet received by the receiver.
-// Returns 0 on success, -1 on error.
+// interpreta o pacote de controlo
+// retorna 0 em caso de sucesso, -1 se ocorrer algum erro
 int parseControlPacket(const unsigned char *packet, int packetSize, int *controlType, long *fileSize, char *fileNameOut) {
-    // check minimal size
+    // tamanho mínimo de um pacote de controlo, que são os C (1), T1(1), L1(1), V1(4), T2(1), L2(1) 
     if (packetSize < 9)
         return -1;
     
     int index = 0;
-    *controlType = packet[index]; 
+    *controlType = packet[index];   //verifica se é START ou END
     
     index++; 
 
-    if (packet[index] != TLV_SIZE)
+    if (packet[index] != TLV_SIZE) //verifica se é TLV_SIZE
         return -1; 
     
     index++;
     int len = packet[index]; 
     index++;
-    if (len != 4 || index + 4 > packetSize)
+    if (len != 4 || index + 4 > packetSize) //verifica se o tamanho é 4 e se não ultrapassa o tamanho do pacote
         return -1;
     
-    int temp1 = packet[index] << 24;
+    int temp1 = packet[index] << 24; 
     index++;
     int temp2 = packet[index] << 16;
     index++;
@@ -127,23 +131,18 @@ int parseControlPacket(const unsigned char *packet, int packetSize, int *control
     int temp4 = packet[index];
     index++;
     
-    *fileSize = (temp1) | (temp2) | (temp3) | (temp4);
+    *fileSize = (temp1) | (temp2) | (temp3) | (temp4); // junta os 4 bytes para obter o tamanho do ficheiro
 
-    if (index >= packetSize) 
-        return -1;
-
-
-    if (packet[index] != TLV_NAME)
+    if (packet[index] != TLV_NAME) //verifica se é TLV_NAME
         return -1;
     index++;
     int nameLen = packet[index]; 
-    if (nameLen <= 0 || nameLen > MAX_FILENAME || index + nameLen > packetSize)
+    if (nameLen <= 0 || nameLen > MAX_FILENAME || index + nameLen > packetSize) //verifica se o tamanho do nome é válido
         return -1;
 
     index++;
-    memcpy(fileNameOut, &packet[index], nameLen);
-    fileNameOut[nameLen] = '\0';
-    
+    memcpy(fileNameOut, &packet[index], nameLen); //copia o nome do ficheiro
+    fileNameOut[nameLen] = '\0'; //adiciona o terminador de string
     return 0;
 }
 
@@ -154,17 +153,20 @@ int parseDataPacket(const unsigned char *packet, int packetSize, int *dataSizeOu
         return -1;
     
     int index = 0;
-    if (packet[index++] != DATA)
+    if (packet[index] != DATA)
         return -1;
+    index++;
     
-    int L2 = packet[index++];
-    int L1 = packet[index++];
+    int L2 = packet[index]; // L2
+    index++;
+    int L1 = packet[index]; // L1
+    index++;
     int payloadSize = L2 * 64 + L1;
     
     if (index + payloadSize > packetSize)
         return -1;
     
-    memcpy(dataOut, &packet[index], payloadSize);
+    memcpy(dataOut, &packet[index], payloadSize); // copiar payload
     *dataSizeOut = payloadSize;
     return 0;
 }
@@ -173,10 +175,11 @@ int parseDataPacket(const unsigned char *packet, int packetSize, int *dataSizeOu
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
+    // Criar uma estrutura LinkLayer com os dados da conexão
     LinkLayer connectionParameters;
-    memset(&connectionParameters, 0, sizeof(LinkLayer));
+    memset(&connectionParameters, 0, sizeof(LinkLayer)); // Inicializar a estrutura com zeros
     
-    // Set connection parameters
+    // Copiar os parâmetros da conexão
     strncpy(connectionParameters.serialPort, serialPort, sizeof(connectionParameters.serialPort) - 1);
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
@@ -191,26 +194,28 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         return;
     }
     
-    // Open connection using the link layer API
+    // Estabelecer a conexão
     int openResult = llopen(connectionParameters);
     if (openResult == -1) {
-        fprintf(stderr, "Connection failed\n");
+        printf("Connection failed\n");
         return;
     }
     printf("Connection established\n");
     
 
-    
+    // Transmitir ou receber o ficheiro
     if (connectionParameters.role == LlTx) {
-        // TRANSMITTER 
+        // Transmiter
+
+        // abrir o ficheiro
         FILE *fp = fopen(filename, "rb");
         if (!fp) {
-            fprintf(stderr, "Error opening file %s\n", filename);
+            printf("Error opening file %s\n", filename);
             llclose(0);
             return;
         }
         
-        // file size
+        // tamanho do ficheiro
         fseek(fp, 0, SEEK_END);
         long fileSize = ftell(fp);
 
@@ -218,48 +223,47 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         
         printf("Sending file %s, size = %ld bytes\n", filename, fileSize);
 
-        // build and send START packet
+        // constroi e manda o control packet
         unsigned char controlPacket[MAX_CONTROL_PACKET_SIZE];
         int controlPacketSize = buildControlPacket(START, fileSize, filename, controlPacket);
         int write_start = llwrite(controlPacket, controlPacketSize);
         if (controlPacketSize < 0 || write_start < 0) {
-
-            fprintf(stderr, "Error sending START packet\n");
+            printf("Error sending START packet\n");
             fclose(fp);
             llclose(0);
             return;
         }
         
-        // read file in chunks and send as data packets
+        // lê o ficheiro e envia os dados
         unsigned char fileBuffer[MAX_PACKET_DATA_SIZE];
-        unsigned char dataPacket[1 + 2 + MAX_PACKET_DATA_SIZE];
+        unsigned char dataPacket[1 + 2 + MAX_PACKET_DATA_SIZE]; 
         int bytesRead;
         int written = 0;
         long totalSent = 0; 
 
-        // Set a bar width (e.g., 50 characters)
+        // tamanho da barra de progresso
         const int barWidth = 50;
-
+        // lê o ficheiro e envia os dados
         while ((bytesRead = fread(fileBuffer, 1, MAX_PACKET_DATA_SIZE, fp)) > 0) {
             int dataPacketSize = buildDataPacket(fileBuffer, bytesRead, dataPacket);
             written = llwrite(dataPacket, dataPacketSize);
             if (written < 0) {
-                fprintf(stderr, "Error sending data packet\n");
+                printf("Error sending data packet\n");
                 fclose(fp);
                 llclose(0);
                 return;
             }
             totalSent += bytesRead;
-            printf("\rSent %ld bytes\n", totalSent);
-            // Calculate progress percentage
+
+            // calcula percentagem
             int percent = (int)((totalSent * 100) / fileSize);
             
-            // Print loading bar
-            printf("\r["); // return carriage to start of line
+            // imprimi barra de progresso
+            printf("\r["); 
             int pos = (percent * barWidth) / 100;
             for (int i = 0; i < barWidth; i++) {
                 if (i < pos)
-                    printf("#");
+                    printf("*");
                 else
                     printf(" ");
             }
@@ -268,46 +272,46 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         fclose(fp);
         
-        // build and send END packet
+        // constroi e manda o pacote de controlo END
         controlPacketSize = buildControlPacket(END, fileSize, filename, controlPacket);
         int write_end = llwrite(controlPacket, controlPacketSize);
         if (controlPacketSize < 0 || write_end < 0) {
-            fprintf(stderr, "Error sending END packet\n");
+            printf("\nError sending END packet\n");
             llclose(0);
             return;
         }
-        printf("File sent successfully.\n");
+        printf("\nFile sent successfully.\n");
     
     }
     else if (connectionParameters.role == LlRx) {
-        // RECEIVER
+        // Receiver
         unsigned char packetBuffer[1 + 2 + MAX_PACKET_DATA_SIZE] = {0};
         int packetSize;
         
-        // wait for the START packet
+        // espera pelo pacote de controlo START
         packetSize = llread(packetBuffer);
 
         if (packetSize < 0) {
-            fprintf(stderr, "Error reading START packet\n");
+            printf("Error reading START packet\n");
             llclose(0);
             return;
         }
-        
+        // verifica se é o pacote START
         int ctrlType = 0;
         long fileSize = 0;
         char receivedFileName[MAX_FILENAME] = {0};
         int parse_result = parseControlPacket(packetBuffer, packetSize, &ctrlType, &fileSize, receivedFileName);
         if (parse_result < 0 || ctrlType != START) {
-            fprintf(stderr, "Error: Expected START packet\n");
+            printf("Error: Expected START packet\n");
             llclose(0);
             return;
         }
         printf("START packet received: file size = %ld, file name = %s\n", fileSize, receivedFileName);
         
-        // prepare output file 
+        // abrir o ficheiro para escrita 
         FILE *fp = fopen(filename, "wb");
         if (!fp) {
-            fprintf(stderr, "Error creating file %s\n", filename);
+            printf("Error creating file %s\n", filename);
             llclose(0);
             return;
         }
@@ -315,23 +319,24 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         long totalBytesReceived = 0;
 
         const int barWidth = 50;
-
+        // receber os dados
         int finish = 1;
         while (finish) {
             packetSize = llread(packetBuffer);
             if (packetSize < 0) {
-                fprintf(stderr, "Error reading packet\n");
+                printf("Error reading packet\n");
                 fclose(fp);
                 llclose(0);
                 return;
             }
             
             int packetType = packetBuffer[0];
+            // verifica se é um pacote de dados
             if (packetType == DATA) {
                 int payloadSize;
                 unsigned char fileBuffer[MAX_PACKET_DATA_SIZE];
                 if (parseDataPacket(packetBuffer, packetSize, &payloadSize, fileBuffer) < 0) {
-                    fprintf(stderr, "Error parsing data packet\n");
+                    printf("Error parsing data packet\n");
                     fclose(fp);
                     llclose(0);
                     return;
@@ -339,13 +344,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 fwrite(fileBuffer, 1, payloadSize, fp);
                 totalBytesReceived += payloadSize;
                 
-                // Update loading bar
+                // imprime a barra de progresso
                 int percent = (int)((totalBytesReceived * 100) / fileSize);
-                printf("\r["); // Return carriage to start of line
+                printf("\r["); 
                 int pos = (percent * barWidth) / 100;
                 for (int i = 0; i < barWidth; i++) {
                     if (i < pos)
-                        printf("#");
+                        printf("*");
                     else
                         printf(" ");
                 }
@@ -353,26 +358,26 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 fflush(stdout);
             }
             else if (packetType == END) {
-                // Validate the END packet if desired
+                // verifica se é o pacote END
                 if (parseControlPacket(packetBuffer, packetSize, &ctrlType, &fileSize, receivedFileName) < 0 || ctrlType != END) {
-                    fprintf(stderr, "Error parsing END packet\n");
+                    printf("Error parsing END packet\n");
                     fclose(fp);
                     llclose(0);
                     return;
                 }
                 finish = 0;
-                printf("END packet received\n");
+                printf("\nEND packet received\n");
             }
             else {
-                fprintf(stderr, "Unknown packet type: %d\n", packetType);
+                printf("\nUnknown packet type: %d\n", packetType);
             }
         }
         fclose(fp);
-        printf("File received successfully, total bytes = %ld\n", totalBytesReceived);
+        printf("\nFile received successfully, total bytes = %ld\n", totalBytesReceived);
         
     }
     
-    // close the connection pass FALSE we don't want statistics printed
+    // fecha a conexão
     llclose(FALSE);
 }
 
