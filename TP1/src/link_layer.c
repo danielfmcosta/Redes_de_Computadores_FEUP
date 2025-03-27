@@ -24,52 +24,53 @@ int global_fd;
 
 #define sleep_time 1
 
-// Buffer sizes
+// tamanho do buffer
 #define BUF_SIZE 512
+// tamanho do buffer com stuffing (pior caso)
 #define MAX_BUF_SIZE BUF_SIZE*2
 
-// Frame constants
+// Frame constantes
 #define FLAG 0x7E
 #define ESCAPE 0x7D
 #define A 0x03
 #define C_0 0x00
 #define C_1 0x40
 
-//SET constants
+//SET constantes
 #define BUF_SIZE_SET 5
 #define A_SET 0x03
 #define C_SET 0x03
 #define BCC1_SET A_SET^C_SET
 
-//UA constants
+//UA constantes
 #define BUF_SIZE_UA 5
 #define A_UA 0x03
 #define C_UA 0x07
 #define BCC1_UA A_UA^C_UA
 
-//DISC constants
+//DISC constantes
 #define BUF_SIZE_DISC 5
 #define A_DISC 0x03
 #define C_DISC 0x0B
 #define BCC1_DISC A_DISC^C_DISC 
 
-//Reply Size
+//Reply constantes
 #define BUF_SIZE_REPLY 5
 #define A_REPLY 0x03
 
-//RR0 constants
+//RR0 constantes
 #define C_RR_0 0x05
 #define BCC1_RR_0 A^C_RR_0
 
-//RR1 constants
+//RR1 constantes
 #define C_RR_1 0x85
 #define BCC1_RR_1 A^C_RR_1
 
-//REJ0 constants
+//REJ0 constantes
 #define C_REJ_0 0x01
 #define BCC1_REJ_0 A^C_REJ_0
 
-//REJ1 constants
+//REJ1 constantes
 #define C_REJ_1 0x81
 #define BCC1_REJ_1 A^C_REJ_1
 
@@ -81,7 +82,7 @@ int alarmCount = 0;
 
 int Ns = 0;
 
-// Calcula o tamanho do frame, se e só se a frame acaber com uma FLAG
+// Calcula o tamanho do frame, se e só se a frame começar e acabar com uma FLAG
 int get_frame_length(unsigned char *frame) {
     int first_FLAG= 0;
     int last_FLAG = 0;
@@ -754,7 +755,7 @@ int llread(unsigned char *packet) {
 int llclose(int showStatistics)
 {
     if(global_connectionParameters.role == LlTx){
-        // Transmiter:
+        // Transmiter
 
         // Envio DISC
         send_DISC(global_fd);
@@ -768,7 +769,7 @@ int llclose(int showStatistics)
         send_UA(global_fd);   
     }
     if(global_connectionParameters.role == LlRx){
-        // Receiver:
+        // Receiver
 
         // Lê DISC
         if(read_DISC(global_fd)==0){
