@@ -23,7 +23,7 @@
 #define TLV_SIZE 0x00 
 #define TLV_NAME 0x01 
 
-#define BUF_SIZE 512
+#define BUF_SIZE 750
 
 // maximo payload size para os data packets 
 #define MAX_PACKET_DATA_SIZE BUF_SIZE - 6 - 3 - 1 // BUF_SIZE - 6 (cabeçalho e rodapé) - 3 (controlo e L2 e L1) - 1 (só por garantia)
