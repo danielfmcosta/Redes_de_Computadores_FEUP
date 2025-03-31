@@ -24,12 +24,12 @@
 #define sleep_time 1
 
 #define DELAY 10 // Delay (ms)
-#define BER 0.0005 //0.0001 // Bit Error Rate (pow(10,-7) -> good wired channel)
+#define BER 0.00065 // Bit Error Rate (pow(10,-7) -> good wired channel)
 #define FER_DATA (1 - pow(1-BER, BUF_SIZE)) // Probabilidade de erro no campo de dados
 #define FER_HEADER (FER_DATA/10) // Probabilidade de erro no cabeçalho
 
 // tamanho do buffer
-#define BUF_SIZE 512
+#define BUF_SIZE 750
 // tamanho do buffer com stuffing (pior caso)
 #define MAX_BUF_SIZE BUF_SIZE*2
 
@@ -99,12 +99,14 @@ void error(unsigned char *frame){
     // Simula erro no cabeçalho
     if (r < FER_HEADER) {
         frame[1] ^= 0xFF;
+        printf("Error in Header!\n");
     } 
 
     r = (double)rand() / RAND_MAX;
     // Simula erro de dados
     if (r < FER_DATA) {
         frame[4] ^= 0xFF;
+        printf("Error in Data!\n");
     }
 }
 
