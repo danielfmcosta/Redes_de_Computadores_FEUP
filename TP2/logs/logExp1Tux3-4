@@ -1,0 +1,91 @@
+No.     Time           Source                Destination           Protocol Length Info
+     24 39.373946113   EdimaxTe_ee:0e:93     Broadcast             ARP      42     Who has 172.16.30.254? Tell 172.16.30.1
+
+Frame 24: 42 bytes on wire (336 bits), 42 bytes captured (336 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Broadcast (ff:ff:ff:ff:ff:ff)
+Address Resolution Protocol (request)
+
+No.     Time           Source                Destination           Protocol Length Info
+     25 39.374028877   Netronix_50:3f:2c     EdimaxTe_ee:0e:93     ARP      60     172.16.30.254 is at 00:08:54:50:3f:2c
+
+Frame 25: 60 bytes on wire (480 bits), 60 bytes captured (480 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Address Resolution Protocol (reply)
+
+No.     Time           Source                Destination           Protocol Length Info
+     26 39.374045429   172.16.30.1           172.16.30.254         ICMP     98     Echo (ping) request  id=0x1cbf, seq=1/256, ttl=64 (reply in 27)
+
+Frame 26: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Netronix_50:3f:2c (00:08:54:50:3f:2c)
+Internet Protocol Version 4, Src: 172.16.30.1, Dst: 172.16.30.254
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     27 39.374139787   172.16.30.254         172.16.30.1           ICMP     98     Echo (ping) reply    id=0x1cbf, seq=1/256, ttl=64 (request in 26)
+
+Frame 27: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Internet Protocol Version 4, Src: 172.16.30.254, Dst: 172.16.30.1
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     29 40.398295433   172.16.30.1           172.16.30.254         ICMP     98     Echo (ping) request  id=0x1cbf, seq=2/512, ttl=64 (reply in 30)
+
+Frame 29: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Netronix_50:3f:2c (00:08:54:50:3f:2c)
+Internet Protocol Version 4, Src: 172.16.30.1, Dst: 172.16.30.254
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     30 40.398385949   172.16.30.254         172.16.30.1           ICMP     98     Echo (ping) reply    id=0x1cbf, seq=2/512, ttl=64 (request in 29)
+
+Frame 30: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Internet Protocol Version 4, Src: 172.16.30.254, Dst: 172.16.30.1
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     31 41.422309996   172.16.30.1           172.16.30.254         ICMP     98     Echo (ping) request  id=0x1cbf, seq=3/768, ttl=64 (reply in 32)
+
+Frame 31: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Netronix_50:3f:2c (00:08:54:50:3f:2c)
+Internet Protocol Version 4, Src: 172.16.30.1, Dst: 172.16.30.254
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     32 41.422402817   172.16.30.254         172.16.30.1           ICMP     98     Echo (ping) reply    id=0x1cbf, seq=3/768, ttl=64 (request in 31)
+
+Frame 32: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Internet Protocol Version 4, Src: 172.16.30.254, Dst: 172.16.30.1
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     34 42.446277345   172.16.30.1           172.16.30.254         ICMP     98     Echo (ping) request  id=0x1cbf, seq=4/1024, ttl=64 (reply in 35)
+
+Frame 34: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Netronix_50:3f:2c (00:08:54:50:3f:2c)
+Internet Protocol Version 4, Src: 172.16.30.1, Dst: 172.16.30.254
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     35 42.446386579   172.16.30.254         172.16.30.1           ICMP     98     Echo (ping) reply    id=0x1cbf, seq=4/1024, ttl=64 (request in 34)
+
+Frame 35: 98 bytes on wire (784 bits), 98 bytes captured (784 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Internet Protocol Version 4, Src: 172.16.30.254, Dst: 172.16.30.1
+Internet Control Message Protocol
+
+No.     Time           Source                Destination           Protocol Length Info
+     37 44.452316965   Netronix_50:3f:2c     EdimaxTe_ee:0e:93     ARP      60     Who has 172.16.30.1? Tell 172.16.30.254
+
+Frame 37: 60 bytes on wire (480 bits), 60 bytes captured (480 bits) on interface 0
+Ethernet II, Src: Netronix_50:3f:2c (00:08:54:50:3f:2c), Dst: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93)
+Address Resolution Protocol (request)
+
+No.     Time           Source                Destination           Protocol Length Info
+     38 44.452337289   EdimaxTe_ee:0e:93     Netronix_50:3f:2c     ARP      42     172.16.30.1 is at 00:50:fc:ee:0e:93
+
+Frame 38: 42 bytes on wire (336 bits), 42 bytes captured (336 bits) on interface 0
+Ethernet II, Src: EdimaxTe_ee:0e:93 (00:50:fc:ee:0e:93), Dst: Netronix_50:3f:2c (00:08:54:50:3f:2c)
+Address Resolution Protocol (reply)
