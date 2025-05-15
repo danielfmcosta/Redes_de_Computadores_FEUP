@@ -209,8 +209,9 @@ int main(int argc, char *argv[]) {
     // Request file
     snprintf(buf, sizeof(buf), "RETR %s\r\n", path);
     write(ctrl, buf, strlen(buf));
-    if (read_response(ctrl, buf, sizeof(buf)) != 150) {
-        fprintf(stderr, "RETR command failed\n");
+    int retr_code = read_response(ctrl, buf, sizeof(buf));
+    if (retr_code != 150 && retr_code != 125) {
+        fprintf(stderr, "RETR command failed (code %d)\n", retr_code);
         exit(-1);
     }
 
