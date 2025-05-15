@@ -1,19 +1,22 @@
 /*
- * Simple FTP Client based on FEUP examples:
+ * ftp_client_simple.c
+ * Simple FTP Client based on FEUP examples with basic credential support
  *   - clientTCP.c (basic TCP connect/send)
  *   - getip.c (DNS resolution via gethostbyname)
  *
+ * Objetivo:
+ *   Com o URL do site FTP ([user:pass@]host/path), conectar ao servidor,
+ *   fazer login (anónimo ou credenciais) e descarregar o ficheiro indicado.
+ *
  * Usage:
- *   ./ftp_client_simple ftp://<host>/<path>
+ *   ./ftp_client_simple ftp://[user:pass@]host/path
  *
  * Supports:
- *   - Anonymous login (USER/PASS)
+ *   - Anonymous or user/password login (USER/PASS)
  *   - Binary mode (TYPE I)
  *   - Passive mode data transfer (PASV + RETR)
  *   - Saves file to current directory
-*/
-
-/// OBjectivo , com o url do site ftp conectar ao servidor, e fazer download do ficheiro indicado na command line
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +31,7 @@
 #define CONTROL_PORT 21
 #define BUF_SIZE 4096
 
-// Read a line (ending in '\n') from sock into buf (null-terminated)
+// Read a line ending in '\n'
 ssize_t read_line(int sock, char *buf, size_t maxlen) {
     ssize_t n, total = 0;
     char c;
@@ -42,30 +45,76 @@ ssize_t read_line(int sock, char *buf, size_t maxlen) {
     return total;
 }
 
+// Read full FTP server response (handles multiline per RFC 959)
+int read_response(int sock, char *buf, size_t buflen) {
+    char code[4];
+    ssize_t n = read_line(sock, buf, buflen);
+    if (n <= 0) return -1;
+    printf("< %s", buf);
+
+    // Copy response code
+    memcpy(code, buf, 3);
+    code[3] = '\0';
+    int multiline = (buf[3] == '-');
+
+    // Read until code + space if multiline
+    while (multiline) {
+        n = read_line(sock, buf, buflen);
+        if (n <= 0) return -1;
+        printf("< %s", buf);
+        if (strncmp(buf, code, 3) == 0 && buf[3] == ' ') {
+            multiline = 0;
+        }
+    }
+    return atoi(code);
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s ftp://<host>/<path>\n", argv[0]);
+        fprintf(stderr, "Usage: %s ftp://[user:pass@]host/path\n", argv[0]);
         exit(-1);
     }
-    
-    // Parse URL: ftp://<host>/<path>
+
+    // Parse URL: ftp://[user:pass@]host/path
     char *url = argv[1];
     const char *prefix = "ftp://";
     if (strncmp(url, prefix, strlen(prefix)) != 0) {
         fprintf(stderr, "URL must start with ftp://\n");
         exit(-1);
     }
-    char *host_path = url + strlen(prefix);
-    char *slash = strchr(host_path, '/');
+    char *p = url + strlen(prefix);
+    // split credentials@host and path
+    char *slash = strchr(p, '/');
     if (!slash) {
         fprintf(stderr, "URL must contain a path after host\n");
         exit(-1);
     }
     *slash = '\0';
-    char *host = host_path;
+    char *cred_host = p;
     char *path = slash + 1;
 
-    // Resolve host
+    // default to anonymous
+    char user[64] = "anonymous";
+    char pass[64] = "anonymous@";
+
+    // check if credentials provided
+    char *at = strchr(cred_host, '@');
+    char *host = cred_host;
+    if (at) {
+        *at = '\0';
+        host = at + 1;
+        // split user:pass
+        char *colon = strchr(cred_host, ':');
+        if (colon) {
+            *colon = '\0';
+            strncpy(user, cred_host, sizeof(user)-1);
+            strncpy(pass, colon+1, sizeof(pass)-1);
+        } else {
+            strncpy(user, cred_host, sizeof(user)-1);
+        }
+    }
+
+    // Resolve hostname
     struct hostent *h;
     if ((h = gethostbyname(host)) == NULL) {
         herror("gethostbyname");
@@ -90,37 +139,54 @@ int main(int argc, char *argv[]) {
     }
 
     char buf[BUF_SIZE];
-    // Read welcome
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    // Read initial server greeting
+    if (read_response(ctrl, buf, sizeof(buf)) < 0) {
+        fprintf(stderr, "Failed to read server greeting\n");
+        exit(-1);
+    }
 
     // Send USER
-    snprintf(buf, sizeof(buf), "USER anonymous\r\n");
+    snprintf(buf, sizeof(buf), "USER %s\r\n", user);
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    if (read_response(ctrl, buf, sizeof(buf)) != 331) {
+        fprintf(stderr, "USER command failed\n");
+        exit(-1);
+    }
 
     // Send PASS
-    snprintf(buf, sizeof(buf), "PASS anonymous@\r\n");
+    snprintf(buf, sizeof(buf), "PASS %s\r\n", pass);
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    if (read_response(ctrl, buf, sizeof(buf)) != 230) {
+        fprintf(stderr, "PASS command failed\n");
+        exit(-1);
+    }
 
     // Set binary mode
     snprintf(buf, sizeof(buf), "TYPE I\r\n");
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    if (read_response(ctrl, buf, sizeof(buf)) != 200) {
+        fprintf(stderr, "Failed to set binary mode\n");
+        exit(-1);
+    }
 
     // Enter passive mode
     snprintf(buf, sizeof(buf), "PASV\r\n");
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    if (read_response(ctrl, buf, sizeof(buf)) != 227) {
+        fprintf(stderr, "PASV command failed\n");
+        exit(-1);
+    }
+    // Parse PASV reply
+    char *start = strchr(buf, '(');
+    char *end   = strchr(buf, ')');
+    if (!start || !end || end < start) {
+        fprintf(stderr, "Invalid PASV response\n");
+        exit(-1);
+    }
     int h1,h2,h3,h4,p1,p2;
-    char *p = strchr(buf, '(');
-    if (!p || sscanf(p+1, "%d,%d,%d,%d,%d,%d", &h1,&h2,&h3,&h4,&p1,&p2) != 6) {
-        fprintf(stderr, "Failed to parse PASV response\n"); exit(-1);
+    if (sscanf(start+1, "%d,%d,%d,%d,%d,%d", &h1,&h2,&h3,&h4,&p1,&p2) != 6) {
+        fprintf(stderr, "Failed to parse PASV address\n");
+        exit(-1);
     }
     char data_ip[64];
     snprintf(data_ip, sizeof(data_ip), "%d.%d.%d.%d", h1,h2,h3,h4);
@@ -143,16 +209,18 @@ int main(int argc, char *argv[]) {
     // Request file
     snprintf(buf, sizeof(buf), "RETR %s\r\n", path);
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    if (read_response(ctrl, buf, sizeof(buf)) != 150) {
+        fprintf(stderr, "RETR command failed\n");
+        exit(-1);
+    }
 
-    // Open local file
+    // Open local file for writing
     char *fname = strrchr(path, '/');
     fname = fname ? fname+1 : path;
     FILE *f = fopen(fname, "wb");
     if (!f) { perror("fopen"); exit(-1); }
 
-    // Read data
+    // Transfer data
     ssize_t n;
     while ((n = read(data, buf, sizeof(buf))) > 0) {
         fwrite(buf, 1, n, f);
@@ -161,18 +229,18 @@ int main(int argc, char *argv[]) {
     fclose(f);
     close(data);
 
-    // Read final reply
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    // Transfer complete reply
+    if (read_response(ctrl, buf, sizeof(buf)) != 226) {
+        fprintf(stderr, "Transfer not properly completed\n");
+        exit(-1);
+    }
 
-    // Quit
+    // QUIT
     snprintf(buf, sizeof(buf), "QUIT\r\n");
     write(ctrl, buf, strlen(buf));
-    read_line(ctrl, buf, sizeof(buf));
-    printf("< %s", buf);
+    read_response(ctrl, buf, sizeof(buf));
     close(ctrl);
 
     printf("Downloaded '%s' successfully.\n", fname);
     return 0;
 }
- 
